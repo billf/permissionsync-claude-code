@@ -24,36 +24,36 @@ TOOL_INPUT=$(echo "$INPUT" | jq -c '.tool_input // {}')
 
 # --- Build the permission rule string ---
 build_rule() {
-  local tool="$1" input="$2"
-  case "$tool" in
-    Bash)
-      local cmd
-      cmd=$(echo "$input" | jq -r '.command // empty')
-      if [[ -n "$cmd" ]]; then
-        local first_word
-        first_word=$(echo "$cmd" | awk '{print $1}')
-        echo "Bash(${first_word} *)"
-      else
-        echo "Bash"
-      fi
-      ;;
-    Read|Write|Edit|MultiEdit)
-      echo "$tool"
-      ;;
-    WebFetch)
-      local url domain
-      url=$(echo "$input" | jq -r '.url // empty')
-      if [[ -n "$url" ]]; then
-        domain=$(echo "$url" | sed -E 's|https?://([^/]+).*|\1|')
-        echo "WebFetch(domain:${domain})"
-      else
-        echo "WebFetch"
-      fi
-      ;;
-    *)
-      echo "$tool"
-      ;;
-  esac
+	local tool="$1" input="$2"
+	case "$tool" in
+	Bash)
+		local cmd
+		cmd=$(echo "$input" | jq -r '.command // empty')
+		if [[ -n "$cmd" ]]; then
+			local first_word
+			first_word=$(echo "$cmd" | awk '{print $1}')
+			echo "Bash(${first_word} *)"
+		else
+			echo "Bash"
+		fi
+		;;
+	Read | Write | Edit | MultiEdit)
+		echo "$tool"
+		;;
+	WebFetch)
+		local url domain
+		url=$(echo "$input" | jq -r '.url // empty')
+		if [[ -n "$url" ]]; then
+			domain=$(echo "$url" | sed -E 's|https?://([^/]+).*|\1|')
+			echo "WebFetch(domain:${domain})"
+		else
+			echo "WebFetch"
+		fi
+		;;
+	*)
+		echo "$tool"
+		;;
+	esac
 }
 
 RULE=$(build_rule "$TOOL_NAME" "$TOOL_INPUT")
@@ -61,18 +61,18 @@ RULE=$(build_rule "$TOOL_NAME" "$TOOL_INPUT")
 # --- Log the request ---
 mkdir -p "$(dirname "$LOG_FILE")"
 jq -nc \
-  --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  --arg tool "$TOOL_NAME" \
-  --arg rule "$RULE" \
-  --arg cwd "$(echo "$INPUT" | jq -r '.cwd // empty')" \
-  '{timestamp: $ts, tool: $tool, rule: $rule, cwd: $cwd}' \
-  >> "$LOG_FILE"
+	--arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+	--arg tool "$TOOL_NAME" \
+	--arg rule "$RULE" \
+	--arg cwd "$(echo "$INPUT" | jq -r '.cwd // empty')" \
+	'{timestamp: $ts, tool: $tool, rule: $rule, cwd: $cwd}' \
+	>>"$LOG_FILE"
 
 # --- Auto-approve mode: if this rule was previously approved, allow it ---
 if [[ "$AUTO_MODE" == "1" ]] && [[ -f "$LOG_FILE" ]]; then
-  if grep -qF "\"rule\":\"${RULE}\"" "$LOG_FILE" 2>/dev/null; then
-    # We've seen and (presumably) approved this before — auto-allow
-    jq -nc '{
+	if grep -qF "\"rule\":\"${RULE}\"" "$LOG_FILE" 2>/dev/null; then
+		# We've seen and (presumably) approved this before — auto-allow
+		jq -nc '{
       "hookSpecificOutput": {
         "hookEventName": "PermissionRequest",
         "decision": {
@@ -80,8 +80,8 @@ if [[ "$AUTO_MODE" == "1" ]] && [[ -f "$LOG_FILE" ]]; then
         }
       }
     }'
-    exit 0
-  fi
+		exit 0
+	fi
 fi
 
 # --- Default: fall through to interactive prompt ---

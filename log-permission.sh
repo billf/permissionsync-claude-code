@@ -20,65 +20,65 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 
 # If we can't parse tool_name, bail and let the normal prompt show
 if [[ -z "$TOOL_NAME" ]]; then
-  exit 0
+	exit 0
 fi
 
 # Build the permission rule string that settings.json expects
 RULE=""
 case "$TOOL_NAME" in
-  Bash)
-    CMD=$(echo "$TOOL_INPUT" | jq -r '.command // empty')
-    if [[ -n "$CMD" ]]; then
-      # Extract the first word (the binary) for a wildcard rule
-      FIRST_WORD=$(echo "$CMD" | awk '{print $1}')
-      RULE="Bash(${FIRST_WORD} *)"
-      # Also store the exact command for reference
-      EXACT_RULE="Bash(${CMD})"
-    else
-      RULE="Bash"
-    fi
-    ;;
-  Read|Write|Edit|MultiEdit)
-    FILE_PATH=$(echo "$TOOL_INPUT" | jq -r '.file_path // empty')
-    if [[ -n "$FILE_PATH" ]]; then
-      RULE="${TOOL_NAME}"
-      EXACT_RULE="${TOOL_NAME}(${FILE_PATH})"
-    else
-      RULE="$TOOL_NAME"
-    fi
-    ;;
-  WebFetch)
-    URL=$(echo "$TOOL_INPUT" | jq -r '.url // empty')
-    if [[ -n "$URL" ]]; then
-      DOMAIN=$(echo "$URL" | sed -E 's|https?://([^/]+).*|\1|')
-      RULE="WebFetch(domain:${DOMAIN})"
-      EXACT_RULE="$RULE"
-    else
-      RULE="WebFetch"
-    fi
-    ;;
-  mcp__*)
-    # MCP tools: log the full tool name
-    RULE="$TOOL_NAME"
-    EXACT_RULE="$TOOL_NAME"
-    ;;
-  *)
-    RULE="$TOOL_NAME"
-    EXACT_RULE="$TOOL_NAME"
-    ;;
+Bash)
+	CMD=$(echo "$TOOL_INPUT" | jq -r '.command // empty')
+	if [[ -n "$CMD" ]]; then
+		# Extract the first word (the binary) for a wildcard rule
+		FIRST_WORD=$(echo "$CMD" | awk '{print $1}')
+		RULE="Bash(${FIRST_WORD} *)"
+		# Also store the exact command for reference
+		EXACT_RULE="Bash(${CMD})"
+	else
+		RULE="Bash"
+	fi
+	;;
+Read | Write | Edit | MultiEdit)
+	FILE_PATH=$(echo "$TOOL_INPUT" | jq -r '.file_path // empty')
+	if [[ -n "$FILE_PATH" ]]; then
+		RULE="${TOOL_NAME}"
+		EXACT_RULE="${TOOL_NAME}(${FILE_PATH})"
+	else
+		RULE="$TOOL_NAME"
+	fi
+	;;
+WebFetch)
+	URL=$(echo "$TOOL_INPUT" | jq -r '.url // empty')
+	if [[ -n "$URL" ]]; then
+		DOMAIN=$(echo "$URL" | sed -E 's|https?://([^/]+).*|\1|')
+		RULE="WebFetch(domain:${DOMAIN})"
+		EXACT_RULE="$RULE"
+	else
+		RULE="WebFetch"
+	fi
+	;;
+mcp__*)
+	# MCP tools: log the full tool name
+	RULE="$TOOL_NAME"
+	EXACT_RULE="$TOOL_NAME"
+	;;
+*)
+	RULE="$TOOL_NAME"
+	EXACT_RULE="$TOOL_NAME"
+	;;
 esac
 
 # Write the approval record (append, atomic-ish via >>)
 mkdir -p "$(dirname "$LOG_FILE")"
 jq -nc \
-  --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  --arg tool "$TOOL_NAME" \
-  --arg rule "${RULE}" \
-  --arg exact "${EXACT_RULE:-$RULE}" \
-  --arg cwd "$CWD" \
-  --arg session "$SESSION_ID" \
-  '{timestamp: $ts, tool: $tool, rule: $rule, exact_rule: $exact, cwd: $cwd, session_id: $session}' \
-  >> "$LOG_FILE"
+	--arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+	--arg tool "$TOOL_NAME" \
+	--arg rule "${RULE}" \
+	--arg exact "${EXACT_RULE:-$RULE}" \
+	--arg cwd "$CWD" \
+	--arg session "$SESSION_ID" \
+	'{timestamp: $ts, tool: $tool, rule: $rule, exact_rule: $exact, cwd: $cwd, session_id: $session}' \
+	>>"$LOG_FILE"
 
 # Don't make a decision — fall through to the normal interactive prompt.
 # The user still approves/denies as usual; we just logged what was requested.

@@ -32,16 +32,16 @@ echo "✓ Copied scripts to $HOOKS_DIR/"
 
 # 2. Choose which hook script to wire up
 if [[ "$MODE" == "--auto" ]]; then
-  HOOK_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
-  echo "✓ Mode: auto-approve previously-seen rules"
+	HOOK_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
+	echo "✓ Mode: auto-approve previously-seen rules"
 else
-  HOOK_CMD="$HOOKS_DIR/log-permission.sh"
-  echo "✓ Mode: log-only (manual approval still required)"
+	HOOK_CMD="$HOOKS_DIR/log-permission.sh"
+	echo "✓ Mode: log-only (manual approval still required)"
 fi
 
 # 3. Merge hook config into settings.json
 if [[ ! -f "$SETTINGS" ]]; then
-  echo '{}' > "$SETTINGS"
+	echo '{}' >"$SETTINGS"
 fi
 
 # Check if PermissionRequest hook already exists
@@ -49,30 +49,30 @@ EXISTING=$(jq '.hooks.PermissionRequest // []' "$SETTINGS" 2>/dev/null || echo '
 ALREADY_INSTALLED=$(echo "$EXISTING" | jq --arg cmd "$HOOK_CMD" '[.[] | .hooks[]? | select(.command == $cmd)] | length')
 
 if [[ "$ALREADY_INSTALLED" -gt 0 ]]; then
-  echo "✓ Hook already installed in $SETTINGS"
+	echo "✓ Hook already installed in $SETTINGS"
 else
-  # Build the new hook entry
-  HOOK_ENTRY=$(jq -nc --arg cmd "$HOOK_CMD" '{
+	# Build the new hook entry
+	HOOK_ENTRY=$(jq -nc --arg cmd "$HOOK_CMD" '{
     "matcher": "*",
     "hooks": [{"type": "command", "command": $cmd}]
   }')
 
-  TEMP=$(mktemp)
-  jq --argjson entry "$HOOK_ENTRY" '
+	TEMP=$(mktemp)
+	jq --argjson entry "$HOOK_ENTRY" '
     .hooks //= {} |
     .hooks.PermissionRequest //= [] |
     .hooks.PermissionRequest += [$entry]
-  ' "$SETTINGS" > "$TEMP"
+  ' "$SETTINGS" >"$TEMP"
 
-  if jq empty "$TEMP" 2>/dev/null; then
-    cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
-    mv "$TEMP" "$SETTINGS"
-    echo "✓ Added PermissionRequest hook to $SETTINGS"
-  else
-    echo "ERROR: Failed to update $SETTINGS"
-    rm -f "$TEMP"
-    exit 1
-  fi
+	if jq empty "$TEMP" 2>/dev/null; then
+		cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+		mv "$TEMP" "$SETTINGS"
+		echo "✓ Added PermissionRequest hook to $SETTINGS"
+	else
+		echo "ERROR: Failed to update $SETTINGS"
+		rm -f "$TEMP"
+		exit 1
+	fi
 fi
 
 echo ""
@@ -90,6 +90,6 @@ echo "  To add sync as a shell alias:"
 echo '    alias claude-sync-perms="~/.claude/hooks/sync-permissions.sh"'
 echo ""
 if [[ "$MODE" != "--auto" ]]; then
-  echo "  To enable auto-approve mode later:"
-  echo "    $0 --auto"
+	echo "  To enable auto-approve mode later:"
+	echo "    $0 --auto"
 fi
