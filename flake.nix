@@ -3,21 +3,13 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    flake-parts.url = "github:hercules-ci/flake-parts";
     git-hooks.url = "github:cachix/git-hooks.nix";
     git-hooks.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, git-hooks }:
+  outputs = inputs@{ flake-parts, ... }:
     let
-      supportedSystems = [
-        "x86_64-linux"
-        "aarch64-linux"
-        "x86_64-darwin"
-        "aarch64-darwin"
-      ];
-      forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-      pkgsFor = system: nixpkgs.legacyPackages.${system};
-
       scripts = [
         "install.sh"
         "log-permission.sh"
@@ -25,10 +17,16 @@
         "sync-permissions.sh"
       ];
     in
-    {
-      packages = forAllSystems (system:
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
+      ];
+
+      perSystem = { config, self', inputs', pkgs, system, ... }:
         let
-          pkgs = pkgsFor system;
           runtimeDeps = [
             pkgs.jq
             pkgs.coreutils
@@ -38,11 +36,11 @@
           ];
         in
         {
-          default = pkgs.stdenvNoCC.mkDerivation {
+          packages.default = pkgs.stdenvNoCC.mkDerivation {
             pname = "permissionsync-cc";
             version = "0.1.0";
 
-            src = self;
+            src = inputs.self;
 
             nativeBuildInputs = [ pkgs.makeWrapper ];
 
@@ -78,43 +76,35 @@
             meta = {
               description = "Log and sync Claude Code permission approvals";
               license = pkgs.lib.licenses.mit;
-              platforms = supportedSystems;
               mainProgram = "install.sh";
             };
           };
-        }
-      );
 
-      checks = forAllSystems (system: {
-        pre-commit-check = git-hooks.lib.${system}.run {
-          src = self;
-          hooks = {
-            shellcheck = {
-              enable = true;
-              excludes = [ "^\\.envrc$" ];
+          checks.pre-commit-check = inputs.git-hooks.lib.${system}.run {
+            src = inputs.self;
+            hooks = {
+              shellcheck = {
+                enable = true;
+                excludes = [ "^\\.envrc$" ];
+              };
+              shfmt.enable = true;
             };
-            shfmt.enable = true;
           };
-        };
-      });
 
-      devShells = forAllSystems (system:
-        let
-          pkgs = pkgsFor system;
-          inherit (self.checks.${system}.pre-commit-check) shellHook enabledPackages;
-        in
-        {
-          default = pkgs.mkShell {
-            inherit shellHook;
-            packages = enabledPackages ++ [
-              pkgs.jq
-              pkgs.coreutils
-              pkgs.gnused
-              pkgs.gnugrep
-              pkgs.diffutils
-            ];
-          };
-        }
-      );
+          devShells.default =
+            let
+              inherit (config.checks.pre-commit-check) shellHook enabledPackages;
+            in
+            pkgs.mkShell {
+              inherit shellHook;
+              packages = enabledPackages ++ [
+                pkgs.jq
+                pkgs.coreutils
+                pkgs.gnused
+                pkgs.gnugrep
+                pkgs.diffutils
+              ];
+            };
+        };
     };
 }
