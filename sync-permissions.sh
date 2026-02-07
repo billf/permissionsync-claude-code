@@ -52,6 +52,7 @@ case "$MODE" in
 --preview)
 	echo "=== Current rules in $SETTINGS_FILE ==="
 	if [[ -n "$EXISTING_RULES" ]]; then
+		# shellcheck disable=SC2001
 		echo "$EXISTING_RULES" | sed 's/^/  /'
 	else
 		echo "  (none)"
@@ -59,6 +60,7 @@ case "$MODE" in
 	echo ""
 	echo "=== New rules from approval log ==="
 	if [[ -n "$NEW_RULES" ]]; then
+		# shellcheck disable=SC2001
 		echo "$NEW_RULES" | sed 's/^/  + /'
 	else
 		echo "  (none — already in sync)"
@@ -105,6 +107,7 @@ case "$MODE" in
 		echo "Backup at ${SETTINGS_FILE}.bak"
 		echo ""
 		echo "Added $(echo "$NEW_RULES" | wc -l | tr -d ' ') new rule(s):"
+		# shellcheck disable=SC2001
 		echo "$NEW_RULES" | sed 's/^/  + /'
 	else
 		echo "ERROR: Generated invalid JSON. Aborting."
