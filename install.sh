@@ -20,11 +20,15 @@ MODE="${1:-}"
 echo "=== Claude Permission Logger — Installer ==="
 echo ""
 
-# 1. Copy hook scripts
+# 1. Copy hook scripts (including shared library files)
 mkdir -p "$HOOKS_DIR"
+cp "$SCRIPT_DIR/permissionsync-config.sh" "$HOOKS_DIR/"
+cp "$SCRIPT_DIR/permissionsync-lib.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/log-permission.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/log-permission-auto.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/sync-permissions.sh" "$HOOKS_DIR/"
+chmod +x "$HOOKS_DIR/permissionsync-config.sh"
+chmod +x "$HOOKS_DIR/permissionsync-lib.sh"
 chmod +x "$HOOKS_DIR/log-permission.sh"
 chmod +x "$HOOKS_DIR/log-permission-auto.sh"
 chmod +x "$HOOKS_DIR/sync-permissions.sh"

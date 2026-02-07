@@ -15,6 +15,8 @@
         "log-permission.sh"
         "log-permission-auto.sh"
         "sync-permissions.sh"
+        "permissionsync-config.sh"
+        "permissionsync-lib.sh"
       ];
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
@@ -78,6 +80,24 @@
               license = pkgs.lib.licenses.mit;
               mainProgram = "install.sh";
             };
+          };
+
+          checks.tests = pkgs.stdenvNoCC.mkDerivation {
+            name = "permissionsync-cc-tests";
+            src = inputs.self;
+            nativeBuildInputs = [ pkgs.bash pkgs.jq ];
+            dontBuild = true;
+            doCheck = true;
+            checkPhase = ''
+              patchShebangs tests/
+              for t in tests/test-*.sh; do
+                echo "=== Running $t ==="
+                bash "$t"
+              done
+            '';
+            installPhase = ''
+              touch $out
+            '';
           };
 
           checks.pre-commit-check = inputs.git-hooks.lib.${system}.run {
