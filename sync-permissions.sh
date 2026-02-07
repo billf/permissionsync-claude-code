@@ -9,8 +9,13 @@
 #   ./sync-permissions.sh --apply      # write to settings.json
 #   ./sync-permissions.sh --print      # just print the deduplicated rules as JSON array
 #   ./sync-permissions.sh --diff       # show diff between current and proposed
+#   ./sync-permissions.sh --refine     # propose replacing broad rules with fine-grained ones
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=permissionsync-lib.sh
+source "${SCRIPT_DIR}/permissionsync-lib.sh"
 
 LOG_FILE="${CLAUDE_PERMISSION_LOG:-$HOME/.claude/permission-approvals.jsonl}"
 SETTINGS_FILE="$HOME/.claude/settings.json"
@@ -44,6 +49,80 @@ NEW_RULES=$(echo "$NEW_RULES" | sed '/^$/d' | sort -u)
 # --- Combine all rules ---
 ALL_RULES=$(printf '%s\n%s' "$EXISTING_RULES" "$RULES_FROM_LOG" | sed '/^$/d' | sort -u)
 
+# expand_safe_direct_rules
+#
+# For each binary seen in the log that has tracked subcommands, emit
+# Bash(binary subcmd *) for all safe subcommands (direct only, no indirection).
+expand_safe_direct_rules() {
+	local seen_binaries=""
+
+	# Extract unique base_command binaries from new-format log entries
+	local base_cmds
+	base_cmds=$(jq -r 'select(.base_command != null and .base_command != "") | .base_command' "$LOG_FILE" 2>/dev/null | sort -u)
+
+	# Collect unique binaries (first word of base_command)
+	while IFS= read -r bc; do
+		[[ -z $bc ]] && continue
+		local bin="${bc%% *}"
+		if has_subcommands "$bin"; then
+			# Check if we've already seen this binary
+			local already=0
+			local sb
+			for sb in $seen_binaries; do
+				if [[ $sb == "$bin" ]]; then
+					already=1
+					break
+				fi
+			done
+			if [[ $already -eq 0 ]]; then
+				seen_binaries="${seen_binaries} ${bin}"
+			fi
+		fi
+	done <<<"$base_cmds"
+
+	# Also check old-format entries (rules like Bash(git *))
+	while IFS= read -r rule; do
+		[[ -z $rule ]] && continue
+		# Match Bash(BINARY *) pattern
+		if [[ $rule =~ ^Bash\(([a-zA-Z0-9_-]+)\ \*\)$ ]]; then
+			local bin="${BASH_REMATCH[1]}"
+			if has_subcommands "$bin"; then
+				local already=0
+				local sb
+				for sb in $seen_binaries; do
+					if [[ $sb == "$bin" ]]; then
+						already=1
+						break
+					fi
+				done
+				if [[ $already -eq 0 ]]; then
+					seen_binaries="${seen_binaries} ${bin}"
+				fi
+			fi
+		fi
+	done <<<"$RULES_FROM_LOG"
+
+	# For each binary, emit safe subcommand rules
+	for bin in $seen_binaries; do
+		local safe_list
+		safe_list=$(get_safe_subcommands "$bin")
+		local subcmd
+		for subcmd in $safe_list; do
+			echo "Bash(${bin} ${subcmd} *)"
+		done
+	done
+}
+
+# collect_indirection_variants
+#
+# For each log entry that was observed with indirection, preserve that
+# indirection variant as an additional rule.
+collect_indirection_variants() {
+	# Only process new-format entries with indirection_chain
+	jq -r 'select(.indirection_chain != null and .indirection_chain != "" and .rule != null) | .rule' \
+		"$LOG_FILE" 2>/dev/null | sort -u
+}
+
 case "$MODE" in
 --print)
 	echo "$ALL_RULES" | jq -R -s 'split("\n") | map(select(length > 0))'
@@ -70,12 +149,105 @@ case "$MODE" in
 	echo "$ALL_RULES" | jq -R -s 'split("\n") | map(select(length > 0))'
 	echo ""
 	echo "Run with --apply to write to $SETTINGS_FILE"
+	echo "Run with --refine to propose fine-grained safe-subcommand rules"
 	;;
 
 --diff)
 	CURRENT=$(jq -S '.permissions.allow // []' "$SETTINGS_FILE" 2>/dev/null || echo '[]')
 	PROPOSED=$(echo "$ALL_RULES" | jq -R -s 'split("\n") | map(select(length > 0)) | sort')
 	diff <(echo "$CURRENT" | jq '.[]' | sort) <(echo "$PROPOSED" | jq '.[]' | sort) || true
+	;;
+
+--refine)
+	echo "=== Fine-Grained Rule Refinement ==="
+	echo ""
+	echo "Proposing replacement of broad rules with safe-subcommand rules."
+	echo "Only safe (read-only) subcommands get direct rules."
+	echo "Indirection variants are only added for combos seen in the log."
+	echo ""
+
+	# Find broad rules that could be refined
+	BROAD_RULES=""
+	while IFS= read -r rule; do
+		[[ -z $rule ]] && continue
+		if [[ $rule =~ ^Bash\(([a-zA-Z0-9_-]+)\ \*\)$ ]]; then
+			local bin="${BASH_REMATCH[1]}"
+			if has_subcommands "$bin"; then
+				BROAD_RULES="${BROAD_RULES}${rule}"$'\n'
+			fi
+		fi
+	done <<<"$ALL_RULES"
+	BROAD_RULES=$(echo "$BROAD_RULES" | sed '/^$/d')
+
+	if [[ -z $BROAD_RULES ]]; then
+		echo "No broad rules found that can be refined."
+		exit 0
+	fi
+
+	echo "Broad rules that would be replaced:"
+	# shellcheck disable=SC2001
+	echo "$BROAD_RULES" | sed 's/^/  - /'
+	echo ""
+
+	# Generate safe replacements
+	SAFE_RULES=$(expand_safe_direct_rules | sort -u)
+
+	# Collect observed non-safe subcommand rules from the log
+	OBSERVED_RULES=""
+	while IFS= read -r rule; do
+		[[ -z $rule ]] && continue
+		# Match Bash(BINARY SUBCMD *) pattern
+		if [[ $rule =~ ^Bash\(([a-zA-Z0-9_-]+)\ ([a-zA-Z0-9_-]+)\ \*\)$ ]]; then
+			local bin="${BASH_REMATCH[1]}"
+			local subcmd="${BASH_REMATCH[2]}"
+			if ! is_safe_subcommand "$bin" "$subcmd"; then
+				OBSERVED_RULES="${OBSERVED_RULES}${rule}"$'\n'
+			fi
+		fi
+	done <<<"$RULES_FROM_LOG"
+	OBSERVED_RULES=$(echo "$OBSERVED_RULES" | sed '/^$/d' | sort -u)
+
+	# Indirection variants from the log
+	INDIRECTION_RULES=$(collect_indirection_variants)
+
+	echo "Safe subcommand rules (auto-generated):"
+	if [[ -n $SAFE_RULES ]]; then
+		# shellcheck disable=SC2001
+		echo "$SAFE_RULES" | sed 's/^/  + /'
+	else
+		echo "  (none)"
+	fi
+	echo ""
+
+	echo "Observed non-safe subcommand rules (from log):"
+	if [[ -n $OBSERVED_RULES ]]; then
+		# shellcheck disable=SC2001
+		echo "$OBSERVED_RULES" | sed 's/^/  + /'
+	else
+		echo "  (none)"
+	fi
+	echo ""
+
+	if [[ -n $INDIRECTION_RULES ]]; then
+		echo "Indirection variant rules (from log):"
+		# shellcheck disable=SC2001
+		echo "$INDIRECTION_RULES" | sed 's/^/  + /'
+		echo ""
+	fi
+
+	# Build refined ALL_RULES: start with current, remove broad, add fine-grained
+	REFINED_RULES="$ALL_RULES"
+	while IFS= read -r broad; do
+		[[ -z $broad ]] && continue
+		REFINED_RULES=$(echo "$REFINED_RULES" | grep -vxF "$broad" || true)
+	done <<<"$BROAD_RULES"
+
+	REFINED_RULES=$(printf '%s\n%s\n%s\n%s' "$REFINED_RULES" "$SAFE_RULES" "$OBSERVED_RULES" "$INDIRECTION_RULES" | sed '/^$/d' | sort -u)
+
+	echo "=== Refined result ==="
+	echo "$REFINED_RULES" | jq -R -s 'split("\n") | map(select(length > 0))'
+	echo ""
+	echo "Run with --refine --apply to write refined rules to $SETTINGS_FILE"
 	;;
 
 --apply)
@@ -117,7 +289,7 @@ case "$MODE" in
 	;;
 
 *)
-	echo "Usage: $0 [--preview|--apply|--print|--diff]"
+	echo "Usage: $0 [--preview|--apply|--print|--diff|--refine]"
 	exit 1
 	;;
 esac
