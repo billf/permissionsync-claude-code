@@ -52,12 +52,20 @@ peel_indirection() {
 		# Strip the wrapper based on type
 		case "$itype" in
 		prefix)
-			# Strip the command word and any flags (words starting with -)
+			# Strip the command word and any flags with their arguments
 			cmd="${cmd#"$first_word"}"
 			cmd="${cmd#"${cmd%%[![:space:]]*}"}"
 			while [[ $cmd == -* ]]; do
-				cmd="${cmd#* }"
+				local flag="${cmd%% *}"
+				cmd="${cmd#"$flag"}"
 				cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+				# If the flag is short (e.g. -u), consume its argument too
+				# unless next word also starts with - (another flag)
+				if [[ ${#flag} -eq 2 ]] && [[ $cmd != -* ]] && [[ -n $cmd ]]; then
+					local flag_arg="${cmd%% *}"
+					cmd="${cmd#"$flag_arg"}"
+					cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+				fi
 			done
 			;;
 		prefix_kv)
@@ -93,12 +101,19 @@ peel_indirection() {
 			fi
 			;;
 		xargs)
-			# Strip xargs + any flags (words starting with -)
+			# Strip xargs + any flags with their arguments
 			cmd="${cmd#"$first_word"}"
 			cmd="${cmd#"${cmd%%[![:space:]]*}"}"
 			while [[ $cmd == -* ]]; do
-				cmd="${cmd#* }"
+				local flag="${cmd%% *}"
+				cmd="${cmd#"$flag"}"
 				cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+				# Short flags (e.g. -I) consume the next word as argument
+				if [[ ${#flag} -eq 2 ]] && [[ $cmd != -* ]] && [[ -n $cmd ]]; then
+					local flag_arg="${cmd%% *}"
+					cmd="${cmd#"$flag_arg"}"
+					cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+				fi
 			done
 			;;
 		esac
