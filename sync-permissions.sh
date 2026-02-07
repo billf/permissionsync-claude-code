@@ -171,8 +171,8 @@ case "$MODE" in
 	while IFS= read -r rule; do
 		[[ -z $rule ]] && continue
 		if [[ $rule =~ ^Bash\(([a-zA-Z0-9_-]+)\ \*\)$ ]]; then
-			local bin="${BASH_REMATCH[1]}"
-			if has_subcommands "$bin"; then
+			_bin="${BASH_REMATCH[1]}"
+			if has_subcommands "$_bin"; then
 				BROAD_RULES="${BROAD_RULES}${rule}"$'\n'
 			fi
 		fi
@@ -198,9 +198,9 @@ case "$MODE" in
 		[[ -z $rule ]] && continue
 		# Match Bash(BINARY SUBCMD *) pattern
 		if [[ $rule =~ ^Bash\(([a-zA-Z0-9_-]+)\ ([a-zA-Z0-9_-]+)\ \*\)$ ]]; then
-			local bin="${BASH_REMATCH[1]}"
-			local subcmd="${BASH_REMATCH[2]}"
-			if ! is_safe_subcommand "$bin" "$subcmd"; then
+			_bin="${BASH_REMATCH[1]}"
+			_subcmd="${BASH_REMATCH[2]}"
+			if ! is_safe_subcommand "$_bin" "$_subcmd"; then
 				OBSERVED_RULES="${OBSERVED_RULES}${rule}"$'\n'
 			fi
 		fi

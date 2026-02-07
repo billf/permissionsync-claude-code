@@ -71,4 +71,5 @@ get_indirection_type() {
 }
 
 # Known indirection prefixes for rule expansion (regular array, Bash 3.2 safe)
+# shellcheck disable=SC2034
 INDIRECTION_PREFIXES=("xargs" "env" "bash -c" "sh -c" "sudo" "nice" "nohup" "time" "command")

@@ -106,6 +106,7 @@
               shellcheck = {
                 enable = true;
                 excludes = [ "^\\.envrc$" ];
+                args = [ "--external-sources" ];
               };
               shfmt.enable = true;
             };

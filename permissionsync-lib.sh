@@ -18,6 +18,7 @@ source "${_PERMISSIONSYNC_LIB_DIR}/permissionsync-config.sh"
 #   INDIRECTION_CHAIN — space-separated list of indirection wrappers found
 #
 # Max 10 iterations to avoid infinite loops.
+# shellcheck disable=SC2034
 peel_indirection() {
 	local cmd="$1"
 	PEELED_COMMAND=""
@@ -161,6 +162,7 @@ has_subcommands() {
 #   INDIRECTION_CHAIN — wrappers stripped (from peel_indirection)
 #   BASE_COMMAND      — "binary subcommand" or just "binary"
 #   IS_SAFE           — "true" if the subcommand is in the safe list
+# shellcheck disable=SC2034
 build_rule_v2() {
 	local tool="$1" input="$2"
 

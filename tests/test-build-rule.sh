@@ -37,7 +37,8 @@ assert_rule() {
 		details="${details}#   indirection_chain: expected '${expected_chain}', got '${INDIRECTION_CHAIN}'"$'\n'
 	fi
 
-	local desc="${tool} $(echo "$input" | jq -r '.command // .url // .file_path // "?"')"
+	local desc
+	desc="${tool} $(echo "$input" | jq -r '.command // .url // .file_path // "?"')"
 	if [[ $ok -eq 1 ]]; then
 		echo "ok ${TEST_NUM} - ${desc}"
 		PASS=$((PASS + 1))
