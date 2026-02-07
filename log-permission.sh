@@ -10,6 +10,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=permissionsync-lib.sh
+source "${SCRIPT_DIR}/permissionsync-lib.sh"
+
 LOG_FILE="${CLAUDE_PERMISSION_LOG:-$HOME/.claude/permission-approvals.jsonl}"
 INPUT=$(cat)
 
@@ -23,50 +27,8 @@ if [[ -z $TOOL_NAME ]]; then
 	exit 0
 fi
 
-# Build the permission rule string that settings.json expects
-RULE=""
-case "$TOOL_NAME" in
-Bash)
-	CMD=$(echo "$TOOL_INPUT" | jq -r '.command // empty')
-	if [[ -n $CMD ]]; then
-		# Extract the first word (the binary) for a wildcard rule
-		FIRST_WORD=$(echo "$CMD" | awk '{print $1}')
-		RULE="Bash(${FIRST_WORD} *)"
-		# Also store the exact command for reference
-		EXACT_RULE="Bash(${CMD})"
-	else
-		RULE="Bash"
-	fi
-	;;
-Read | Write | Edit | MultiEdit)
-	FILE_PATH=$(echo "$TOOL_INPUT" | jq -r '.file_path // empty')
-	if [[ -n $FILE_PATH ]]; then
-		RULE="${TOOL_NAME}"
-		EXACT_RULE="${TOOL_NAME}(${FILE_PATH})"
-	else
-		RULE="$TOOL_NAME"
-	fi
-	;;
-WebFetch)
-	URL=$(echo "$TOOL_INPUT" | jq -r '.url // empty')
-	if [[ -n $URL ]]; then
-		DOMAIN=$(echo "$URL" | sed -E 's|https?://([^/]+).*|\1|')
-		RULE="WebFetch(domain:${DOMAIN})"
-		EXACT_RULE="$RULE"
-	else
-		RULE="WebFetch"
-	fi
-	;;
-mcp__*)
-	# MCP tools: log the full tool name
-	RULE="$TOOL_NAME"
-	EXACT_RULE="$TOOL_NAME"
-	;;
-*)
-	RULE="$TOOL_NAME"
-	EXACT_RULE="$TOOL_NAME"
-	;;
-esac
+# Build the permission rule using the shared library
+build_rule_v2 "$TOOL_NAME" "$TOOL_INPUT"
 
 # Write the approval record (append, atomic-ish via >>)
 mkdir -p "$(dirname "$LOG_FILE")"
@@ -75,9 +37,12 @@ jq -nc \
 	--arg tool "$TOOL_NAME" \
 	--arg rule "${RULE}" \
 	--arg exact "${EXACT_RULE:-$RULE}" \
+	--arg base_command "${BASE_COMMAND}" \
+	--arg indirection_chain "${INDIRECTION_CHAIN}" \
+	--arg is_safe "${IS_SAFE}" \
 	--arg cwd "$CWD" \
 	--arg session "$SESSION_ID" \
-	'{timestamp: $ts, tool: $tool, rule: $rule, exact_rule: $exact, cwd: $cwd, session_id: $session}' \
+	'{timestamp: $ts, tool: $tool, rule: $rule, exact_rule: $exact, base_command: $base_command, indirection_chain: $indirection_chain, is_safe: $is_safe, cwd: $cwd, session_id: $session}' \
 	>>"$LOG_FILE"
 
 # Don't make a decision — fall through to the normal interactive prompt.
