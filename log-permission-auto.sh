@@ -20,7 +20,7 @@ INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 TOOL_INPUT=$(echo "$INPUT" | jq -c '.tool_input // {}')
 
-[[ -z "$TOOL_NAME" ]] && exit 0
+[[ -z $TOOL_NAME ]] && exit 0
 
 # --- Build the permission rule string ---
 build_rule() {
@@ -29,7 +29,7 @@ build_rule() {
 	Bash)
 		local cmd
 		cmd=$(echo "$input" | jq -r '.command // empty')
-		if [[ -n "$cmd" ]]; then
+		if [[ -n $cmd ]]; then
 			local first_word
 			first_word=$(echo "$cmd" | awk '{print $1}')
 			echo "Bash(${first_word} *)"
@@ -43,7 +43,7 @@ build_rule() {
 	WebFetch)
 		local url domain
 		url=$(echo "$input" | jq -r '.url // empty')
-		if [[ -n "$url" ]]; then
+		if [[ -n $url ]]; then
 			domain=$(echo "$url" | sed -E 's|https?://([^/]+).*|\1|')
 			echo "WebFetch(domain:${domain})"
 		else
@@ -69,7 +69,7 @@ jq -nc \
 	>>"$LOG_FILE"
 
 # --- Auto-approve mode: if this rule was previously approved, allow it ---
-if [[ "$AUTO_MODE" == "1" ]] && [[ -f "$LOG_FILE" ]]; then
+if [[ $AUTO_MODE == "1" ]] && [[ -f $LOG_FILE ]]; then
 	if grep -qF "\"rule\":\"${RULE}\"" "$LOG_FILE" 2>/dev/null; then
 		# We've seen and (presumably) approved this before — auto-allow
 		jq -nc '{

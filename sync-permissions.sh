@@ -16,7 +16,7 @@ LOG_FILE="${CLAUDE_PERMISSION_LOG:-$HOME/.claude/permission-approvals.jsonl}"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 MODE="${1:---preview}"
 
-if [[ ! -f "$LOG_FILE" ]]; then
+if [[ ! -f $LOG_FILE ]]; then
 	echo "No approval log found at $LOG_FILE"
 	echo "Run Claude Code with the PermissionRequest hook first."
 	exit 1
@@ -27,14 +27,14 @@ RULES_FROM_LOG=$(jq -r '.rule' "$LOG_FILE" | sort -u)
 
 # --- Read existing allow rules from settings.json ---
 EXISTING_RULES=""
-if [[ -f "$SETTINGS_FILE" ]]; then
+if [[ -f $SETTINGS_FILE ]]; then
 	EXISTING_RULES=$(jq -r '.permissions.allow[]? // empty' "$SETTINGS_FILE" 2>/dev/null | sort -u)
 fi
 
 # --- Compute new rules (in log but not in settings) ---
 NEW_RULES=""
 while IFS= read -r rule; do
-	[[ -z "$rule" ]] && continue
+	[[ -z $rule ]] && continue
 	if ! echo "$EXISTING_RULES" | grep -qxF "$rule"; then
 		NEW_RULES="${NEW_RULES}${rule}"$'\n'
 	fi
@@ -51,7 +51,7 @@ case "$MODE" in
 
 --preview)
 	echo "=== Current rules in $SETTINGS_FILE ==="
-	if [[ -n "$EXISTING_RULES" ]]; then
+	if [[ -n $EXISTING_RULES ]]; then
 		# shellcheck disable=SC2001
 		echo "$EXISTING_RULES" | sed 's/^/  /'
 	else
@@ -59,7 +59,7 @@ case "$MODE" in
 	fi
 	echo ""
 	echo "=== New rules from approval log ==="
-	if [[ -n "$NEW_RULES" ]]; then
+	if [[ -n $NEW_RULES ]]; then
 		# shellcheck disable=SC2001
 		echo "$NEW_RULES" | sed 's/^/  + /'
 	else
@@ -79,7 +79,7 @@ case "$MODE" in
 	;;
 
 --apply)
-	if [[ -z "$NEW_RULES" ]]; then
+	if [[ -z $NEW_RULES ]]; then
 		echo "Already in sync. Nothing to do."
 		exit 0
 	fi
@@ -88,7 +88,7 @@ case "$MODE" in
 	ALLOW_JSON=$(echo "$ALL_RULES" | jq -R -s 'split("\n") | map(select(length > 0)) | sort')
 
 	# Ensure settings.json exists with valid structure
-	if [[ ! -f "$SETTINGS_FILE" ]]; then
+	if [[ ! -f $SETTINGS_FILE ]]; then
 		echo '{}' >"$SETTINGS_FILE"
 	fi
 

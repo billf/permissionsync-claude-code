@@ -19,7 +19,7 @@ CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 
 # If we can't parse tool_name, bail and let the normal prompt show
-if [[ -z "$TOOL_NAME" ]]; then
+if [[ -z $TOOL_NAME ]]; then
 	exit 0
 fi
 
@@ -28,7 +28,7 @@ RULE=""
 case "$TOOL_NAME" in
 Bash)
 	CMD=$(echo "$TOOL_INPUT" | jq -r '.command // empty')
-	if [[ -n "$CMD" ]]; then
+	if [[ -n $CMD ]]; then
 		# Extract the first word (the binary) for a wildcard rule
 		FIRST_WORD=$(echo "$CMD" | awk '{print $1}')
 		RULE="Bash(${FIRST_WORD} *)"
@@ -40,7 +40,7 @@ Bash)
 	;;
 Read | Write | Edit | MultiEdit)
 	FILE_PATH=$(echo "$TOOL_INPUT" | jq -r '.file_path // empty')
-	if [[ -n "$FILE_PATH" ]]; then
+	if [[ -n $FILE_PATH ]]; then
 		RULE="${TOOL_NAME}"
 		EXACT_RULE="${TOOL_NAME}(${FILE_PATH})"
 	else
@@ -49,7 +49,7 @@ Read | Write | Edit | MultiEdit)
 	;;
 WebFetch)
 	URL=$(echo "$TOOL_INPUT" | jq -r '.url // empty')
-	if [[ -n "$URL" ]]; then
+	if [[ -n $URL ]]; then
 		DOMAIN=$(echo "$URL" | sed -E 's|https?://([^/]+).*|\1|')
 		RULE="WebFetch(domain:${DOMAIN})"
 		EXACT_RULE="$RULE"

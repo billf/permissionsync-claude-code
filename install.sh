@@ -31,7 +31,7 @@ chmod +x "$HOOKS_DIR/sync-permissions.sh"
 echo "✓ Copied scripts to $HOOKS_DIR/"
 
 # 2. Choose which hook script to wire up
-if [[ "$MODE" == "--auto" ]]; then
+if [[ $MODE == "--auto" ]]; then
 	HOOK_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
 	echo "✓ Mode: auto-approve previously-seen rules"
 else
@@ -40,7 +40,7 @@ else
 fi
 
 # 3. Merge hook config into settings.json
-if [[ ! -f "$SETTINGS" ]]; then
+if [[ ! -f $SETTINGS ]]; then
 	echo '{}' >"$SETTINGS"
 fi
 
@@ -48,7 +48,7 @@ fi
 EXISTING=$(jq '.hooks.PermissionRequest // []' "$SETTINGS" 2>/dev/null || echo '[]')
 ALREADY_INSTALLED=$(echo "$EXISTING" | jq --arg cmd "$HOOK_CMD" '[.[] | .hooks[]? | select(.command == $cmd)] | length')
 
-if [[ "$ALREADY_INSTALLED" -gt 0 ]]; then
+if [[ $ALREADY_INSTALLED -gt 0 ]]; then
 	echo "✓ Hook already installed in $SETTINGS"
 else
 	# Build the new hook entry
@@ -89,7 +89,7 @@ echo ""
 echo "  To add sync as a shell alias:"
 echo '    alias claude-sync-perms="~/.claude/hooks/sync-permissions.sh"'
 echo ""
-if [[ "$MODE" != "--auto" ]]; then
+if [[ $MODE != "--auto" ]]; then
 	echo "  To enable auto-approve mode later:"
 	echo "    $0 --auto"
 fi

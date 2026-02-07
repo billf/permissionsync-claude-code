@@ -1,9 +1,13 @@
 {
   description = "permissionsync-cc — log and sync Claude Code permission approvals";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    git-hooks.url = "github:cachix/git-hooks.nix";
+    git-hooks.inputs.nixpkgs.follows = "nixpkgs";
+  };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, git-hooks }:
     let
       supportedSystems = [
         "x86_64-linux"
@@ -81,48 +85,34 @@
         }
       );
 
+      checks = forAllSystems (system: {
+        pre-commit-check = git-hooks.lib.${system}.run {
+          src = self;
+          hooks = {
+            shellcheck = {
+              enable = true;
+              excludes = [ "^\\.envrc$" ];
+            };
+            shfmt.enable = true;
+          };
+        };
+      });
+
       devShells = forAllSystems (system:
-        let pkgs = pkgsFor system;
-        in {
+        let
+          pkgs = pkgsFor system;
+          inherit (self.checks.${system}.pre-commit-check) shellHook enabledPackages;
+        in
+        {
           default = pkgs.mkShell {
-            packages = [
+            inherit shellHook;
+            packages = enabledPackages ++ [
               pkgs.jq
-              pkgs.shellcheck
-              pkgs.shfmt
               pkgs.coreutils
               pkgs.gnused
               pkgs.gnugrep
               pkgs.diffutils
             ];
-          };
-        }
-      );
-
-      checks = forAllSystems (system:
-        let pkgs = pkgsFor system;
-        in {
-          shellcheck = pkgs.stdenvNoCC.mkDerivation {
-            name = "check-shellcheck";
-            src = self;
-            nativeBuildInputs = [ pkgs.shellcheck ];
-            dontBuild = true;
-            doCheck = true;
-            checkPhase = ''
-              shellcheck -s bash ${builtins.concatStringsSep " " (map (s: "$src/${s}") scripts)}
-            '';
-            installPhase = "mkdir -p $out";
-          };
-
-          shfmt = pkgs.stdenvNoCC.mkDerivation {
-            name = "check-shfmt";
-            src = self;
-            nativeBuildInputs = [ pkgs.shfmt ];
-            dontBuild = true;
-            doCheck = true;
-            checkPhase = ''
-              shfmt -d ${builtins.concatStringsSep " " (map (s: "$src/${s}") scripts)}
-            '';
-            installPhase = "mkdir -p $out";
           };
         }
       );
