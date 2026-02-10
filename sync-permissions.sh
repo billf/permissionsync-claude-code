@@ -128,13 +128,20 @@ expand_safe_direct_rules() {
 		fi
 	done <<<"$RULES_FROM_LOG"
 
-	# For each binary, emit safe subcommand rules
+	# For each binary, emit safe subcommand rules + alternative flag forms
 	for bin in $seen_binaries; do
 		local safe_list
 		safe_list=$(get_safe_subcommands "$bin")
+		local alt_prefixes
+		alt_prefixes=$(get_alt_rule_prefixes "$bin")
 		local subcmd
 		for subcmd in $safe_list; do
 			echo "Bash(${bin} ${subcmd} *)"
+			# Emit alternative forms (e.g. git -C * log *)
+			local prefix
+			for prefix in $alt_prefixes; do
+				echo "Bash(${bin} ${prefix} * ${subcmd} *)"
+			done
 		done
 	done
 }

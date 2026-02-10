@@ -85,6 +85,24 @@ is_shell_keyword() {
 	esac
 }
 
+# get_pre_subcommand_flags BINARY → flags (with arguments) to skip when finding
+# the real subcommand. e.g. git -C /path log → subcommand is "log", not "-C".
+get_pre_subcommand_flags() {
+	case "$1" in
+	git) echo "-C -c --git-dir --work-tree" ;;
+	*) echo "" ;;
+	esac
+}
+
+# get_alt_rule_prefixes BINARY → flag prefixes that should generate alternative
+# permission rules. e.g. git log → also emit "git -C * log".
+get_alt_rule_prefixes() {
+	case "$1" in
+	git) echo "-C" ;;
+	*) echo "" ;;
+	esac
+}
+
 # Known indirection prefixes for rule expansion (regular array, Bash 3.2 safe)
 # shellcheck disable=SC2034
 INDIRECTION_PREFIXES=("xargs" "env" "bash -c" "sh -c" "sudo" "nice" "nohup" "time" "command")

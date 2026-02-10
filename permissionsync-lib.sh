@@ -200,6 +200,37 @@ build_rule_v2() {
 			else
 				rest="${effective#"$binary" }"
 			fi
+
+			# Skip pre-subcommand flags (e.g. git -C /path log → "log")
+			local skip_flags
+			skip_flags=$(get_pre_subcommand_flags "$binary")
+			if [[ -n $skip_flags ]]; then
+				while [[ -n $rest ]]; do
+					local next_word="${rest%% *}"
+					local is_skip=0
+					local sf
+					for sf in $skip_flags; do
+						if [[ $next_word == "$sf" ]]; then
+							is_skip=1
+							break
+						fi
+					done
+					if [[ $is_skip -eq 1 ]]; then
+						# Skip the flag
+						rest="${rest#"$next_word"}"
+						rest="${rest#"${rest%%[![:space:]]*}"}"
+						# Skip its argument
+						if [[ -n $rest ]]; then
+							local skip_arg="${rest%% *}"
+							rest="${rest#"$skip_arg"}"
+							rest="${rest#"${rest%%[![:space:]]*}"}"
+						fi
+					else
+						break
+					fi
+				done
+			fi
+
 			subcommand="${rest%% *}"
 			if [[ $subcommand == "$rest" ]] && [[ -z $rest ]]; then
 				subcommand=""

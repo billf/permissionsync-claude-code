@@ -80,6 +80,19 @@ assert_rule "Bash" '{"command":"xargs git log"}' \
 assert_rule "Bash" '{"command":"bash -c '\''git diff'\''"}' \
 	"Bash(git diff *)" "git diff" "true" "bash"
 
+# --- Bash: pre-subcommand flags (git -C /path subcmd) ---
+assert_rule "Bash" '{"command":"git -C /tmp/repo status"}' \
+	"Bash(git status *)" "git status" "true" ""
+
+assert_rule "Bash" '{"command":"git -C /tmp/repo push origin main"}' \
+	"Bash(git push *)" "git push" "false" ""
+
+assert_rule "Bash" '{"command":"git --git-dir /tmp/.git log --oneline"}' \
+	"Bash(git log *)" "git log" "true" ""
+
+assert_rule "Bash" '{"command":"git -C /tmp -c core.autocrlf=true status"}' \
+	"Bash(git status *)" "git status" "true" ""
+
 # --- Bash: no subcommand tracking for unknown binaries ---
 assert_rule "Bash" '{"command":"python script.py"}' \
 	"Bash(python *)" "python" "false" ""
