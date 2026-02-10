@@ -190,8 +190,8 @@ build_rule_v2() {
 			# Extract binary and subcommand from the effective command
 			local binary subcommand rest
 			binary="${effective%% *}"
-			# Validate binary looks like a command (not shell syntax/heredoc garbage)
-			if [[ ! $binary =~ ^[a-zA-Z0-9_.~/-]+$ ]]; then
+			# Validate binary looks like a command (not shell syntax/keywords/garbage)
+			if [[ ! $binary =~ ^[a-zA-Z0-9_.~/-]+$ ]] || is_shell_keyword "$binary"; then
 				binary=""
 			fi
 			if [[ $binary == "$effective" ]]; then

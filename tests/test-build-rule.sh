@@ -88,6 +88,16 @@ assert_rule "Bash" '{"command":"python script.py"}' \
 assert_rule "Bash" "$(printf '{"command":"git commit -m msg\\nCo-Authored-By: test"}')" \
 	"Bash(git commit *)" "git commit" "false" ""
 
+# --- Bash: shell keywords should not become rules ---
+assert_rule "Bash" '{"command":"for f in *.sh; do echo $f; done"}' \
+	"Bash" "" "false" ""
+
+assert_rule "Bash" '{"command":"if true; then echo yes; fi"}' \
+	"Bash" "" "false" ""
+
+assert_rule "Bash" '{"command":"while read -r line; do echo $line; done"}' \
+	"Bash" "" "false" ""
+
 # --- Bash: garbage/shell-syntax first word ---
 assert_rule "Bash" '{"command":"){ echo foo; }"}' \
 	"Bash" "" "false" ""

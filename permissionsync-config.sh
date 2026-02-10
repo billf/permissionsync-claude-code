@@ -70,6 +70,21 @@ get_indirection_type() {
 	esac
 }
 
+# is_shell_keyword WORD → 0 if WORD is a shell keyword/builtin that shouldn't
+# become a permission rule binary (for, if, while, etc.)
+is_shell_keyword() {
+	case "$1" in
+	for | if | then | else | elif | fi | while | until | do | done | \
+		case | esac | select | in | function | time | coproc | \
+		'{' | '}' | '!' | '[[' | ']]')
+		return 0
+		;;
+	*)
+		return 1
+		;;
+	esac
+}
+
 # Known indirection prefixes for rule expansion (regular array, Bash 3.2 safe)
 # shellcheck disable=SC2034
 INDIRECTION_PREFIXES=("xargs" "env" "bash -c" "sh -c" "sudo" "nice" "nohup" "time" "command")
