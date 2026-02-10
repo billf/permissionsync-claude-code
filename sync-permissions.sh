@@ -186,7 +186,10 @@ compute_refined_rules() {
 		REFINED_RULES=$(echo "$REFINED_RULES" | grep -vxF "$broad" || true)
 	done <<<"$BROAD_RULES"
 
-	REFINED_RULES=$(printf '%s\n%s\n%s\n%s' "$REFINED_RULES" "$SAFE_RULES" "$OBSERVED_RULES" "$INDIRECTION_RULES" | sed '/^$/d' | sort -u)
+	# Only include safe subcommand rules in the refined set.
+	# Observed non-safe commands and indirection variants are shown
+	# for informational purposes but require manual opt-in.
+	REFINED_RULES=$(printf '%s\n%s' "$REFINED_RULES" "$SAFE_RULES" | sed '/^$/d' | sort -u)
 }
 
 # --- Helper: write rules to settings.json ---
@@ -244,19 +247,19 @@ if [[ $REFINE -eq 1 ]]; then
 	fi
 	echo ""
 
-	echo "Observed non-safe subcommand rules (from log):"
+	echo "Observed non-safe subcommand rules (NOT included — add manually if needed):"
 	if [[ -n $OBSERVED_RULES ]]; then
 		# shellcheck disable=SC2001
-		echo "$OBSERVED_RULES" | sed 's/^/  + /'
+		echo "$OBSERVED_RULES" | sed 's/^/    /'
 	else
 		echo "  (none)"
 	fi
 	echo ""
 
 	if [[ -n $INDIRECTION_RULES ]]; then
-		echo "Indirection variant rules (from log):"
+		echo "Indirection variant rules (NOT included — add manually if needed):"
 		# shellcheck disable=SC2001
-		echo "$INDIRECTION_RULES" | sed 's/^/  + /'
+		echo "$INDIRECTION_RULES" | sed 's/^/    /'
 		echo ""
 	fi
 
