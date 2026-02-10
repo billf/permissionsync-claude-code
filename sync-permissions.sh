@@ -9,7 +9,8 @@
 #   ./sync-permissions.sh --apply      # write to settings.json
 #   ./sync-permissions.sh --print      # just print the deduplicated rules as JSON array
 #   ./sync-permissions.sh --diff       # show diff between current and proposed
-#   ./sync-permissions.sh --refine     # propose replacing broad rules with fine-grained ones
+#   ./sync-permissions.sh --refine          # propose replacing broad rules with fine-grained ones
+#   ./sync-permissions.sh --refine --apply # write refined rules to settings.json
 
 set -euo pipefail
 
@@ -19,7 +20,26 @@ source "${SCRIPT_DIR}/permissionsync-lib.sh"
 
 LOG_FILE="${CLAUDE_PERMISSION_LOG:-$HOME/.claude/permission-approvals.jsonl}"
 SETTINGS_FILE="$HOME/.claude/settings.json"
-MODE="${1:---preview}"
+
+# Parse flags
+REFINE=0
+APPLY=0
+MODE=""
+for arg in "$@"; do
+	case "$arg" in
+	--refine) REFINE=1 ;;
+	--apply) APPLY=1 ;;
+	--preview | --print | --diff) MODE="$arg" ;;
+	*)
+		echo "Usage: $0 [--preview|--apply|--print|--diff|--refine] [--apply]"
+		exit 1
+		;;
+	esac
+done
+# Default to --preview if nothing specified
+if [[ $REFINE -eq 0 ]] && [[ $APPLY -eq 0 ]] && [[ -z $MODE ]]; then
+	MODE="--preview"
+fi
 
 if [[ ! -f $LOG_FILE ]]; then
 	echo "No approval log found at $LOG_FILE"
@@ -123,49 +143,8 @@ collect_indirection_variants() {
 		"$LOG_FILE" 2>/dev/null | sort -u
 }
 
-case "$MODE" in
---print)
-	echo "$ALL_RULES" | jq -R -s 'split("\n") | map(select(length > 0))'
-	;;
-
---preview)
-	echo "=== Current rules in $SETTINGS_FILE ==="
-	if [[ -n $EXISTING_RULES ]]; then
-		# shellcheck disable=SC2001
-		echo "$EXISTING_RULES" | sed 's/^/  /'
-	else
-		echo "  (none)"
-	fi
-	echo ""
-	echo "=== New rules from approval log ==="
-	if [[ -n $NEW_RULES ]]; then
-		# shellcheck disable=SC2001
-		echo "$NEW_RULES" | sed 's/^/  + /'
-	else
-		echo "  (none — already in sync)"
-	fi
-	echo ""
-	echo "=== Merged result ==="
-	echo "$ALL_RULES" | jq -R -s 'split("\n") | map(select(length > 0))'
-	echo ""
-	echo "Run with --apply to write to $SETTINGS_FILE"
-	echo "Run with --refine to propose fine-grained safe-subcommand rules"
-	;;
-
---diff)
-	CURRENT=$(jq -S '.permissions.allow // []' "$SETTINGS_FILE" 2>/dev/null || echo '[]')
-	PROPOSED=$(echo "$ALL_RULES" | jq -R -s 'split("\n") | map(select(length > 0)) | sort')
-	diff <(echo "$CURRENT" | jq '.[]' | sort) <(echo "$PROPOSED" | jq '.[]' | sort) || true
-	;;
-
---refine)
-	echo "=== Fine-Grained Rule Refinement ==="
-	echo ""
-	echo "Proposing replacement of broad rules with safe-subcommand rules."
-	echo "Only safe (read-only) subcommands get direct rules."
-	echo "Indirection variants are only added for combos seen in the log."
-	echo ""
-
+# --- Helper: compute refined rules (used by --refine preview and --refine --apply) ---
+compute_refined_rules() {
 	# Find broad rules that could be refined
 	BROAD_RULES=""
 	while IFS= read -r rule; do
@@ -178,16 +157,6 @@ case "$MODE" in
 		fi
 	done <<<"$ALL_RULES"
 	BROAD_RULES=$(echo "$BROAD_RULES" | sed '/^$/d')
-
-	if [[ -z $BROAD_RULES ]]; then
-		echo "No broad rules found that can be refined."
-		exit 0
-	fi
-
-	echo "Broad rules that would be replaced:"
-	# shellcheck disable=SC2001
-	echo "$BROAD_RULES" | sed 's/^/  - /'
-	echo ""
 
 	# Generate safe replacements
 	SAFE_RULES=$(expand_safe_direct_rules | sort -u)
@@ -209,6 +178,62 @@ case "$MODE" in
 
 	# Indirection variants from the log
 	INDIRECTION_RULES=$(collect_indirection_variants)
+
+	# Build refined rule set: start with current, remove broad, add fine-grained
+	REFINED_RULES="$ALL_RULES"
+	while IFS= read -r broad; do
+		[[ -z $broad ]] && continue
+		REFINED_RULES=$(echo "$REFINED_RULES" | grep -vxF "$broad" || true)
+	done <<<"$BROAD_RULES"
+
+	REFINED_RULES=$(printf '%s\n%s\n%s\n%s' "$REFINED_RULES" "$SAFE_RULES" "$OBSERVED_RULES" "$INDIRECTION_RULES" | sed '/^$/d' | sort -u)
+}
+
+# --- Helper: write rules to settings.json ---
+write_settings() {
+	local allow_rules="$1"
+	local label="$2"
+
+	ALLOW_JSON=$(echo "$allow_rules" | jq -R -s 'split("\n") | map(select(length > 0)) | sort')
+
+	# Ensure settings.json exists with valid structure
+	if [[ ! -f $SETTINGS_FILE ]]; then
+		echo '{}' >"$SETTINGS_FILE"
+	fi
+
+	TEMP=$(mktemp)
+	jq --argjson allow "$ALLOW_JSON" '
+      .permissions //= {} |
+      .permissions.allow = $allow
+    ' "$SETTINGS_FILE" >"$TEMP"
+
+	if jq empty "$TEMP" 2>/dev/null; then
+		cp "$SETTINGS_FILE" "${SETTINGS_FILE}.bak"
+		mv "$TEMP" "$SETTINGS_FILE"
+		echo "Updated $SETTINGS_FILE ($label)"
+		echo "Backup at ${SETTINGS_FILE}.bak"
+	else
+		echo "ERROR: Generated invalid JSON. Aborting."
+		rm -f "$TEMP"
+		exit 1
+	fi
+}
+
+# --- Dispatch ---
+if [[ $REFINE -eq 1 ]]; then
+	compute_refined_rules
+
+	if [[ -z $BROAD_RULES ]]; then
+		echo "No broad rules found that can be refined."
+		exit 0
+	fi
+
+	echo "=== Fine-Grained Rule Refinement ==="
+	echo ""
+	echo "Broad rules that would be replaced:"
+	# shellcheck disable=SC2001
+	echo "$BROAD_RULES" | sed 's/^/  - /'
+	echo ""
 
 	echo "Safe subcommand rules (auto-generated):"
 	if [[ -n $SAFE_RULES ]]; then
@@ -235,61 +260,67 @@ case "$MODE" in
 		echo ""
 	fi
 
-	# Build refined ALL_RULES: start with current, remove broad, add fine-grained
-	REFINED_RULES="$ALL_RULES"
-	while IFS= read -r broad; do
-		[[ -z $broad ]] && continue
-		REFINED_RULES=$(echo "$REFINED_RULES" | grep -vxF "$broad" || true)
-	done <<<"$BROAD_RULES"
-
-	REFINED_RULES=$(printf '%s\n%s\n%s\n%s' "$REFINED_RULES" "$SAFE_RULES" "$OBSERVED_RULES" "$INDIRECTION_RULES" | sed '/^$/d' | sort -u)
-
 	echo "=== Refined result ==="
 	echo "$REFINED_RULES" | jq -R -s 'split("\n") | map(select(length > 0))'
 	echo ""
-	echo "Run with --refine --apply to write refined rules to $SETTINGS_FILE"
-	;;
 
---apply)
+	if [[ $APPLY -eq 1 ]]; then
+		write_settings "$REFINED_RULES" "refined rules"
+	else
+		echo "Run with --refine --apply to write refined rules to $SETTINGS_FILE"
+	fi
+
+elif [[ $APPLY -eq 1 ]]; then
 	if [[ -z $NEW_RULES ]]; then
 		echo "Already in sync. Nothing to do."
 		exit 0
 	fi
 
-	# Build the merged allow array
-	ALLOW_JSON=$(echo "$ALL_RULES" | jq -R -s 'split("\n") | map(select(length > 0)) | sort')
+	write_settings "$ALL_RULES" "merged rules"
+	echo ""
+	echo "Added $(echo "$NEW_RULES" | wc -l | tr -d ' ') new rule(s):"
+	# shellcheck disable=SC2001
+	echo "$NEW_RULES" | sed 's/^/  + /'
 
-	# Ensure settings.json exists with valid structure
-	if [[ ! -f $SETTINGS_FILE ]]; then
-		echo '{}' >"$SETTINGS_FILE"
-	fi
+else
+	case "$MODE" in
+	--print)
+		echo "$ALL_RULES" | jq -R -s 'split("\n") | map(select(length > 0))'
+		;;
 
-	# Merge into settings.json, preserving all other keys
-	TEMP=$(mktemp)
-	jq --argjson allow "$ALLOW_JSON" '
-      .permissions //= {} |
-      .permissions.allow = $allow
-    ' "$SETTINGS_FILE" >"$TEMP"
-
-	# Safety: validate JSON before overwriting
-	if jq empty "$TEMP" 2>/dev/null; then
-		cp "$SETTINGS_FILE" "${SETTINGS_FILE}.bak"
-		mv "$TEMP" "$SETTINGS_FILE"
-		echo "Updated $SETTINGS_FILE"
-		echo "Backup at ${SETTINGS_FILE}.bak"
+	--preview)
+		echo "=== Current rules in $SETTINGS_FILE ==="
+		if [[ -n $EXISTING_RULES ]]; then
+			# shellcheck disable=SC2001
+			echo "$EXISTING_RULES" | sed 's/^/  /'
+		else
+			echo "  (none)"
+		fi
 		echo ""
-		echo "Added $(echo "$NEW_RULES" | wc -l | tr -d ' ') new rule(s):"
-		# shellcheck disable=SC2001
-		echo "$NEW_RULES" | sed 's/^/  + /'
-	else
-		echo "ERROR: Generated invalid JSON. Aborting."
-		rm -f "$TEMP"
-		exit 1
-	fi
-	;;
+		echo "=== New rules from approval log ==="
+		if [[ -n $NEW_RULES ]]; then
+			# shellcheck disable=SC2001
+			echo "$NEW_RULES" | sed 's/^/  + /'
+		else
+			echo "  (none — already in sync)"
+		fi
+		echo ""
+		echo "=== Merged result ==="
+		echo "$ALL_RULES" | jq -R -s 'split("\n") | map(select(length > 0))'
+		echo ""
+		echo "Run with --apply to write to $SETTINGS_FILE"
+		echo "Run with --refine to propose fine-grained safe-subcommand rules"
+		;;
 
-*)
-	echo "Usage: $0 [--preview|--apply|--print|--diff|--refine]"
-	exit 1
-	;;
-esac
+	--diff)
+		CURRENT=$(jq -S '.permissions.allow // []' "$SETTINGS_FILE" 2>/dev/null || echo '[]')
+		PROPOSED=$(echo "$ALL_RULES" | jq -R -s 'split("\n") | map(select(length > 0)) | sort')
+		diff <(echo "$CURRENT" | jq '.[]' | sort) <(echo "$PROPOSED" | jq '.[]' | sort) || true
+		;;
+
+	*)
+		echo "Usage: $0 [--preview|--apply|--print|--diff|--refine] [--apply]"
+		exit 1
+		;;
+	esac
+fi
