@@ -178,13 +178,22 @@ build_rule_v2() {
 		local cmd
 		cmd=$(echo "$input" | jq -r '.command // empty')
 		if [[ -n $cmd ]]; then
+			# Use only the first line for rule extraction (heredocs, pipes etc.
+			# can span multiple lines — we only care about the command itself)
+			local first_line
+			first_line="${cmd%%$'\n'*}"
+
 			# Peel indirection wrappers
-			peel_indirection "$cmd"
+			peel_indirection "$first_line"
 			local effective="${PEELED_COMMAND}"
 
 			# Extract binary and subcommand from the effective command
 			local binary subcommand rest
 			binary="${effective%% *}"
+			# Validate binary looks like a command (not shell syntax/heredoc garbage)
+			if [[ ! $binary =~ ^[a-zA-Z0-9_.~/-]+$ ]]; then
+				binary=""
+			fi
 			if [[ $binary == "$effective" ]]; then
 				# Single word command
 				rest=""

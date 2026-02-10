@@ -47,8 +47,14 @@ if [[ ! -f $LOG_FILE ]]; then
 	exit 1
 fi
 
-# --- Extract unique rules from the log ---
-RULES_FROM_LOG=$(jq -r '.rule' "$LOG_FILE" | sort -u)
+# --- Extract unique rules from the log, filtering out garbage ---
+# Valid permission rules are either:
+#   ToolName(args...)  — e.g. Bash(git *), WebFetch(domain:example.com)
+#   ToolName           — bare tool name (Read, Write, Edit, MultiEdit, WebFetch)
+#   mcp__*             — MCP tool names
+RULES_FROM_LOG=$(jq -r '.rule // empty' "$LOG_FILE" |
+	grep -E '^(Bash\(.*\)|Read|Write|Edit|MultiEdit|WebFetch(\(.*\))?|mcp__.*)$' |
+	sort -u)
 
 # --- Read existing allow rules from settings.json ---
 EXISTING_RULES=""

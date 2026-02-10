@@ -84,6 +84,14 @@ assert_rule "Bash" '{"command":"bash -c '\''git diff'\''"}' \
 assert_rule "Bash" '{"command":"python script.py"}' \
 	"Bash(python *)" "python" "false" ""
 
+# --- Bash: multiline commands (should use first line only) ---
+assert_rule "Bash" "$(printf '{"command":"git commit -m msg\\nCo-Authored-By: test"}')" \
+	"Bash(git commit *)" "git commit" "false" ""
+
+# --- Bash: garbage/shell-syntax first word ---
+assert_rule "Bash" '{"command":"){ echo foo; }"}' \
+	"Bash" "" "false" ""
+
 # --- Bash: empty command ---
 assert_rule "Bash" '{"command":""}' \
 	"Bash" "" "false" ""
