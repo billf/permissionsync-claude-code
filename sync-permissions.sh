@@ -52,8 +52,24 @@ fi
 #   ToolName(args...)  — e.g. Bash(git *), WebFetch(domain:example.com)
 #   ToolName           — bare tool name (Read, Write, Edit, MultiEdit, WebFetch)
 #   mcp__*             — MCP tool names
+# Also filters out rules for blocklisted binaries (shells/interpreters).
+filter_rules() {
+	while IFS= read -r rule; do
+		[[ -z $rule ]] && continue
+		# Extract the binary from Bash(BINARY ...) rules
+		if [[ $rule =~ ^Bash\(([^\ \)]+) ]]; then
+			local bin="${BASH_REMATCH[1]}"
+			if is_blocklisted_binary "$bin"; then
+				continue
+			fi
+		fi
+		echo "$rule"
+	done
+}
+
 RULES_FROM_LOG=$(jq -r '.rule // empty' "$LOG_FILE" |
 	grep -E '^(Bash\(.*\)|Read|Write|Edit|MultiEdit|WebFetch(\(.*\))?|mcp__.*)$' |
+	filter_rules |
 	sort -u)
 
 # --- Read existing allow rules from settings.json ---

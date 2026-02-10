@@ -93,9 +93,22 @@ assert_rule "Bash" '{"command":"git --git-dir /tmp/.git log --oneline"}' \
 assert_rule "Bash" '{"command":"git -C /tmp -c core.autocrlf=true status"}' \
 	"Bash(git status *)" "git status" "true" ""
 
-# --- Bash: no subcommand tracking for unknown binaries ---
+# --- Bash: blocklisted binaries (shells/interpreters) should not become rules ---
+assert_rule "Bash" '{"command":"bash script.sh"}' \
+	"Bash" "" "false" ""
+
+assert_rule "Bash" '{"command":"/bin/bash script.sh"}' \
+	"Bash" "" "false" ""
+
 assert_rule "Bash" '{"command":"python script.py"}' \
-	"Bash(python *)" "python" "false" ""
+	"Bash" "" "false" ""
+
+assert_rule "Bash" '{"command":"node server.js"}' \
+	"Bash" "" "false" ""
+
+# --- Bash: no subcommand tracking for unknown binaries ---
+assert_rule "Bash" '{"command":"cat file.txt"}' \
+	"Bash(cat *)" "cat" "false" ""
 
 # --- Bash: multiline commands (should use first line only) ---
 assert_rule "Bash" "$(printf '{"command":"git commit -m msg\\nCo-Authored-By: test"}')" \

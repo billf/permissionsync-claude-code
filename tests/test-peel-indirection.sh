@@ -65,6 +65,10 @@ assert_peeled "bash -c git status" "git status" "bash"
 assert_peeled "sudo env FOO=bar git push" "git push" "sudo env"
 assert_peeled "env FOO=bar sudo git push" "git push" "env sudo"
 
+# bash without -c is NOT indirection (it's running a script)
+assert_peeled "bash script.sh" "bash script.sh" ""
+assert_peeled "sh script.sh" "sh script.sh" ""
+
 # Single word command (no indirection possible)
 assert_peeled "ls" "ls" ""
 

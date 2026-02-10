@@ -70,6 +70,23 @@ get_indirection_type() {
 	esac
 }
 
+# is_blocklisted_binary WORD → 0 if WORD is a shell/interpreter that should
+# never become a permission rule (allows arbitrary code execution).
+# Matches both bare names and absolute paths (e.g. bash, /bin/bash).
+is_blocklisted_binary() {
+	local name="${1##*/}" # strip path prefix: /bin/bash → bash
+	case "$name" in
+	bash | sh | zsh | dash | ksh | csh | tcsh | fish | \
+		python | python2 | python3 | ruby | perl | node | \
+		eval | exec | source)
+		return 0
+		;;
+	*)
+		return 1
+		;;
+	esac
+}
+
 # is_shell_keyword WORD → 0 if WORD is a shell keyword/builtin that shouldn't
 # become a permission rule binary (for, if, while, etc.)
 is_shell_keyword() {

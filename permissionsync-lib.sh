@@ -84,21 +84,29 @@ peel_indirection() {
 			done
 			;;
 		shell_c)
-			# Strip "bash -c", "sh -c" etc., then unquote the next arg
-			cmd="${cmd#"$first_word"}"
-			cmd="${cmd#"${cmd%%[![:space:]]*}"}"
-			# Expect -c flag
-			if [[ $cmd == -c* ]]; then
-				cmd="${cmd#-c}"
-				cmd="${cmd#"${cmd%%[![:space:]]*}"}"
-				# Unquote if wrapped in single or double quotes
-				if [[ $cmd == \"*\" ]]; then
-					cmd="${cmd#\"}"
-					cmd="${cmd%\"}"
-				elif [[ $cmd == \'*\' ]]; then
-					cmd="${cmd#\'}"
-					cmd="${cmd%\'}"
+			# Only treat as indirection if -c flag follows (bash -c "cmd")
+			# bash script.sh is NOT indirection — it's running a script
+			local rest_after="${cmd#"$first_word"}"
+			rest_after="${rest_after#"${rest_after%%[![:space:]]*}"}"
+			if [[ $rest_after != -c* ]]; then
+				# Not "bash -c" — undo the indirection chain entry and stop
+				if [[ $INDIRECTION_CHAIN == "$first_word" ]]; then
+					INDIRECTION_CHAIN=""
+				else
+					INDIRECTION_CHAIN="${INDIRECTION_CHAIN% "$first_word"}"
 				fi
+				break
+			fi
+			# Strip "bash -c", then unquote the next arg
+			cmd="${rest_after#-c}"
+			cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+			# Unquote if wrapped in single or double quotes
+			if [[ $cmd == \"*\" ]]; then
+				cmd="${cmd#\"}"
+				cmd="${cmd%\"}"
+			elif [[ $cmd == \'*\' ]]; then
+				cmd="${cmd#\'}"
+				cmd="${cmd%\'}"
 			fi
 			;;
 		xargs)
@@ -190,8 +198,8 @@ build_rule_v2() {
 			# Extract binary and subcommand from the effective command
 			local binary subcommand rest
 			binary="${effective%% *}"
-			# Validate binary looks like a command (not shell syntax/keywords/garbage)
-			if [[ ! $binary =~ ^[a-zA-Z0-9_.~/-]+$ ]] || is_shell_keyword "$binary"; then
+			# Validate binary looks like a command (not shell syntax/keywords/interpreters/garbage)
+			if [[ ! $binary =~ ^[a-zA-Z0-9_.~/-]+$ ]] || is_shell_keyword "$binary" || is_blocklisted_binary "$binary"; then
 				binary=""
 			fi
 			if [[ $binary == "$effective" ]]; then
