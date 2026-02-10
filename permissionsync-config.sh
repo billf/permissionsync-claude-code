@@ -75,7 +75,7 @@ get_indirection_type() {
 is_shell_keyword() {
 	case "$1" in
 	for | if | then | else | elif | fi | while | until | do | done | \
-		case | esac | select | in | function | time | coproc | \
+		"case" | "esac" | select | in | function | time | coproc | \
 		'{' | '}' | '!' | '[[' | ']]')
 		return 0
 		;;

@@ -89,12 +89,14 @@ assert_rule "Bash" "$(printf '{"command":"git commit -m msg\\nCo-Authored-By: te
 	"Bash(git commit *)" "git commit" "false" ""
 
 # --- Bash: shell keywords should not become rules ---
+# shellcheck disable=SC2016
 assert_rule "Bash" '{"command":"for f in *.sh; do echo $f; done"}' \
 	"Bash" "" "false" ""
 
 assert_rule "Bash" '{"command":"if true; then echo yes; fi"}' \
 	"Bash" "" "false" ""
 
+# shellcheck disable=SC2016
 assert_rule "Bash" '{"command":"while read -r line; do echo $line; done"}' \
 	"Bash" "" "false" ""
 
