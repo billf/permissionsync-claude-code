@@ -8,21 +8,29 @@
 get_safe_subcommands() {
 	case "$1" in
 	git)
+		# Truly read-only subcommands only. Excluded:
+		#   config — can set hooks paths and create trojan aliases
+		#   stash  — modifies working tree state
 		echo "status log diff show branch tag describe rev-parse remote" \
 			"ls-files ls-tree cat-file shortlog reflog blame" \
-			"config stash version help"
+			"version help"
 		;;
 	cargo)
-		echo "check build clippy test bench doc fmt metadata tree" \
+		# Excluded: build (build.rs runs arbitrary code), test/bench (execute code),
+		#   doc (doc-tests execute code)
+		echo "check clippy fmt metadata tree" \
 			"read-manifest pkgid verify-project version"
 		;;
 	npm)
-		echo "ls list outdated view info pack audit test start" \
+		# Excluded: test/start (run arbitrary scripts from package.json),
+		#   audit (audit fix installs packages)
+		echo "ls list outdated view info pack" \
 			"config prefix root"
 		;;
 	nix)
-		echo "eval build log show-derivation path-info store" \
-			"flake develop shell"
+		# Excluded: eval (arbitrary code), build (build hooks run code),
+		#   develop/shell (execute shellHook), flake (fetches+evaluates remote code)
+		echo "log show-derivation path-info store"
 		;;
 	docker)
 		echo "ps images inspect logs stats top version info" \

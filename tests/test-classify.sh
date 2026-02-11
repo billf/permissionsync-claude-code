@@ -71,9 +71,8 @@ assert_safe "git" "diff"
 assert_safe "git" "show"
 assert_safe "git" "branch"
 assert_safe "git" "blame"
-assert_safe "git" "config"
 
-# git unsafe subcommands
+# git unsafe subcommands (SEC-02: config removed from safe list)
 assert_not_safe "git" "push"
 assert_not_safe "git" "pull"
 assert_not_safe "git" "merge"
@@ -81,25 +80,45 @@ assert_not_safe "git" "rebase"
 assert_not_safe "git" "reset"
 assert_not_safe "git" "checkout"
 assert_not_safe "git" "commit"
+assert_not_safe "git" "config"
+assert_not_safe "git" "stash"
 
-# cargo safe
+# cargo safe (SEC-02: build/test/bench/doc removed)
 assert_safe "cargo" "check"
-assert_safe "cargo" "build"
 assert_safe "cargo" "clippy"
-assert_safe "cargo" "test"
+assert_safe "cargo" "fmt"
 
 # cargo unsafe
 assert_not_safe "cargo" "publish"
 assert_not_safe "cargo" "install"
+assert_not_safe "cargo" "build"
+assert_not_safe "cargo" "test"
+assert_not_safe "cargo" "bench"
+assert_not_safe "cargo" "doc"
 
-# npm safe
+# npm safe (SEC-02: test/start/audit removed)
 assert_safe "npm" "ls"
-assert_safe "npm" "test"
-assert_safe "npm" "audit"
+assert_safe "npm" "list"
+assert_safe "npm" "outdated"
 
 # npm unsafe
 assert_not_safe "npm" "install"
 assert_not_safe "npm" "publish"
+assert_not_safe "npm" "test"
+assert_not_safe "npm" "start"
+assert_not_safe "npm" "audit"
+
+# nix safe (SEC-02: eval/build/develop/shell/flake removed)
+assert_safe "nix" "log"
+assert_safe "nix" "show-derivation"
+assert_safe "nix" "path-info"
+
+# nix unsafe
+assert_not_safe "nix" "eval"
+assert_not_safe "nix" "build"
+assert_not_safe "nix" "develop"
+assert_not_safe "nix" "shell"
+assert_not_safe "nix" "flake"
 
 # Unknown binary
 assert_not_safe "unknown_tool" "whatever"
