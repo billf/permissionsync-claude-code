@@ -15,12 +15,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/permissionsync-lib.sh"
 
 LOG_FILE="${CLAUDE_PERMISSION_LOG:-$HOME/.claude/permission-approvals.jsonl}"
-INPUT=$(cat)
+INPUT=$(< /dev/stdin)
 
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
-TOOL_INPUT=$(echo "$INPUT" | jq -c '.tool_input // {}')
-CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
+# Parse all fields in a single jq call to minimize subprocess overhead
+eval "$(jq -r '@sh "TOOL_NAME=\(.tool_name // "") TOOL_INPUT=\(.tool_input // {} | tostring) CWD=\(.cwd // "") SESSION_ID=\(.session_id // "")"' <<< "$INPUT")"
 
 # If we can't parse tool_name, bail and let the normal prompt show
 if [[ -z $TOOL_NAME ]]; then

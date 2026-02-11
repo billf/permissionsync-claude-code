@@ -19,10 +19,10 @@ source "${SCRIPT_DIR}/permissionsync-lib.sh"
 
 LOG_FILE="${CLAUDE_PERMISSION_LOG:-$HOME/.claude/permission-approvals.jsonl}"
 AUTO_MODE="${CLAUDE_PERMISSION_AUTO:-0}"
-INPUT=$(cat)
+INPUT=$(< /dev/stdin)
 
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
-TOOL_INPUT=$(echo "$INPUT" | jq -c '.tool_input // {}')
+# Parse all fields in a single jq call to minimize subprocess overhead
+eval "$(jq -r '@sh "TOOL_NAME=\(.tool_name // "") TOOL_INPUT=\(.tool_input // {} | tostring) CWD=\(.cwd // "")"' <<< "$INPUT")"
 
 [[ -z $TOOL_NAME ]] && exit 0
 
@@ -38,7 +38,7 @@ jq -nc \
 	--arg base_command "${BASE_COMMAND}" \
 	--arg indirection_chain "${INDIRECTION_CHAIN}" \
 	--arg is_safe "${IS_SAFE}" \
-	--arg cwd "$(echo "$INPUT" | jq -r '.cwd // empty')" \
+	--arg cwd "$CWD" \
 	'{timestamp: $ts, tool: $tool, rule: $rule, base_command: $base_command, indirection_chain: $indirection_chain, is_safe: $is_safe, cwd: $cwd}' \
 	>>"$LOG_FILE"
 

@@ -184,7 +184,7 @@ build_rule_v2() {
 	case "$tool" in
 	Bash)
 		local cmd
-		cmd=$(echo "$input" | jq -r '.command // empty')
+		cmd=$(jq -r '.command // empty' <<< "$input")
 		if [[ -n $cmd ]]; then
 			# Use only the first line for rule extraction (heredocs, pipes etc.
 			# can span multiple lines — we only care about the command itself)
@@ -290,7 +290,7 @@ build_rule_v2() {
 		;;
 	Read | Write | Edit | MultiEdit)
 		local file_path
-		file_path=$(echo "$input" | jq -r '.file_path // empty')
+		file_path=$(jq -r '.file_path // empty' <<< "$input")
 		RULE="${tool}"
 		if [[ -n $file_path ]]; then
 			EXACT_RULE="${tool}(${file_path})"
@@ -301,9 +301,11 @@ build_rule_v2() {
 		;;
 	WebFetch)
 		local url domain
-		url=$(echo "$input" | jq -r '.url // empty')
+		url=$(jq -r '.url // empty' <<< "$input")
 		if [[ -n $url ]]; then
-			domain=$(echo "$url" | sed -E 's|https?://([^/]+).*|\1|')
+			# Extract domain using Bash parameter expansion (no subprocess)
+			domain="${url#*://}"
+			domain="${domain%%/*}"
 			RULE="WebFetch(domain:${domain})"
 		else
 			RULE="WebFetch"
