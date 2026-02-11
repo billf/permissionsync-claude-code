@@ -79,14 +79,8 @@ if [[ -f $SETTINGS_FILE ]]; then
 fi
 
 # --- Compute new rules (in log but not in settings) ---
-NEW_RULES=""
-while IFS= read -r rule; do
-	[[ -z $rule ]] && continue
-	if ! echo "$EXISTING_RULES" | grep -qxF "$rule"; then
-		NEW_RULES="${NEW_RULES}${rule}"$'\n'
-	fi
-done <<<"$RULES_FROM_LOG"
-NEW_RULES=$(echo "$NEW_RULES" | sed '/^$/d' | sort -u)
+# Use comm to find rules in log but not in settings (both already sorted)
+NEW_RULES=$(comm -23 <(echo "$RULES_FROM_LOG" | sed '/^$/d') <(echo "$EXISTING_RULES" | sed '/^$/d'))
 
 # --- Combine all rules ---
 ALL_RULES=$(printf '%s\n%s' "$EXISTING_RULES" "$RULES_FROM_LOG" | sed '/^$/d' | sort -u)
@@ -96,56 +90,22 @@ ALL_RULES=$(printf '%s\n%s' "$EXISTING_RULES" "$RULES_FROM_LOG" | sed '/^$/d' | 
 # For each binary seen in the log that has tracked subcommands, emit
 # Bash(binary subcmd *) for all safe subcommands (direct only, no indirection).
 expand_safe_direct_rules() {
-	local seen_binaries=""
+	# Collect unique binaries from new-format (base_command) and old-format (Bash(bin *)) entries
+	local seen_binaries
+	seen_binaries=$(
+		{
+			# New-format: first word of base_command
+			jq -r 'select(.base_command != null and .base_command != "") | .base_command | split(" ")[0]' \
+				"$LOG_FILE" 2>/dev/null
+			# Old-format: extract binary from Bash(BINARY *) rules
+			echo "$RULES_FROM_LOG" | sed -n 's/^Bash(\([a-zA-Z0-9_-]*\) \*)/\1/p'
+		} | sort -u
+	)
 
-	# Extract unique base_command binaries from new-format log entries
-	local base_cmds
-	base_cmds=$(jq -r 'select(.base_command != null and .base_command != "") | .base_command' "$LOG_FILE" 2>/dev/null | sort -u)
-
-	# Collect unique binaries (first word of base_command)
-	while IFS= read -r bc; do
-		[[ -z $bc ]] && continue
-		local bin="${bc%% *}"
-		if has_subcommands "$bin"; then
-			# Check if we've already seen this binary
-			local already=0
-			local sb
-			for sb in $seen_binaries; do
-				if [[ $sb == "$bin" ]]; then
-					already=1
-					break
-				fi
-			done
-			if [[ $already -eq 0 ]]; then
-				seen_binaries="${seen_binaries} ${bin}"
-			fi
-		fi
-	done <<<"$base_cmds"
-
-	# Also check old-format entries (rules like Bash(git *))
-	while IFS= read -r rule; do
-		[[ -z $rule ]] && continue
-		# Match Bash(BINARY *) pattern
-		if [[ $rule =~ ^Bash\(([a-zA-Z0-9_-]+)\ \*\)$ ]]; then
-			local bin="${BASH_REMATCH[1]}"
-			if has_subcommands "$bin"; then
-				local already=0
-				local sb
-				for sb in $seen_binaries; do
-					if [[ $sb == "$bin" ]]; then
-						already=1
-						break
-					fi
-				done
-				if [[ $already -eq 0 ]]; then
-					seen_binaries="${seen_binaries} ${bin}"
-				fi
-			fi
-		fi
-	done <<<"$RULES_FROM_LOG"
-
-	# For each binary, emit safe subcommand rules + alternative flag forms
+	# For each binary with tracked subcommands, emit safe rules
+	local bin
 	for bin in $seen_binaries; do
+		has_subcommands "$bin" || continue
 		local safe_list
 		safe_list=$(get_safe_subcommands "$bin")
 		local alt_prefixes
