@@ -165,7 +165,6 @@ has_subcommands() {
 # Builds a permission rule string from a tool invocation.
 # Sets globals:
 #   RULE              — the permission rule (e.g. "Bash(git status *)")
-#   EXACT_RULE        — the exact command rule (e.g. "Bash(git status --short)")
 #   PEELED_COMMAND    — command after stripping indirection (from peel_indirection)
 #   INDIRECTION_CHAIN — wrappers stripped (from peel_indirection)
 #   BASE_COMMAND      — "binary subcommand" or just "binary"
@@ -175,7 +174,6 @@ build_rule_v2() {
 	local tool="$1" input="$2"
 
 	RULE=""
-	EXACT_RULE=""
 	PEELED_COMMAND=""
 	INDIRECTION_CHAIN=""
 	BASE_COMMAND=""
@@ -282,7 +280,6 @@ build_rule_v2() {
 				RULE="Bash"
 				BASE_COMMAND=""
 			fi
-			EXACT_RULE="Bash(${cmd})"
 		else
 			RULE="Bash"
 			BASE_COMMAND=""
@@ -292,11 +289,6 @@ build_rule_v2() {
 		local file_path
 		file_path=$(jq -r '.file_path // empty' <<< "$input")
 		RULE="${tool}"
-		if [[ -n $file_path ]]; then
-			EXACT_RULE="${tool}(${file_path})"
-		else
-			EXACT_RULE="${tool}"
-		fi
 		BASE_COMMAND=""
 		;;
 	WebFetch)
@@ -310,17 +302,14 @@ build_rule_v2() {
 		else
 			RULE="WebFetch"
 		fi
-		EXACT_RULE="$RULE"
 		BASE_COMMAND=""
 		;;
 	mcp__*)
 		RULE="$tool"
-		EXACT_RULE="$tool"
 		BASE_COMMAND=""
 		;;
 	*)
 		RULE="$tool"
-		EXACT_RULE="$tool"
 		BASE_COMMAND=""
 		;;
 	esac
