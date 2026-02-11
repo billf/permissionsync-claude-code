@@ -162,25 +162,16 @@ expand_safe_direct_rules() {
 	done
 }
 
-# collect_indirection_variants
-#
-# For each log entry that was observed with indirection, preserve that
-# indirection variant as an additional rule.
-collect_indirection_variants() {
-	# Only process new-format entries with indirection_chain
-	jq -r 'select(.indirection_chain != null and .indirection_chain != "" and .rule != null) | .rule' \
-		"$LOG_FILE" 2>/dev/null | sort -u
-}
-
 # --- Helper: compute refined rules (used by --refine preview and --refine --apply) ---
 compute_refined_rules() {
 	# Find broad rules that could be refined
 	BROAD_RULES=""
+	local bin
 	while IFS= read -r rule; do
 		[[ -z $rule ]] && continue
 		if [[ $rule =~ ^Bash\(([a-zA-Z0-9_-]+)\ \*\)$ ]]; then
-			_bin="${BASH_REMATCH[1]}"
-			if has_subcommands "$_bin"; then
+			bin="${BASH_REMATCH[1]}"
+			if has_subcommands "$bin"; then
 				BROAD_RULES="${BROAD_RULES}${rule}"$'\n'
 			fi
 		fi
@@ -192,21 +183,19 @@ compute_refined_rules() {
 
 	# Collect observed non-safe subcommand rules from the log
 	OBSERVED_RULES=""
+	local subcmd
 	while IFS= read -r rule; do
 		[[ -z $rule ]] && continue
 		# Match Bash(BINARY SUBCMD *) pattern
 		if [[ $rule =~ ^Bash\(([a-zA-Z0-9_-]+)\ ([a-zA-Z0-9_-]+)\ \*\)$ ]]; then
-			_bin="${BASH_REMATCH[1]}"
-			_subcmd="${BASH_REMATCH[2]}"
-			if ! is_safe_subcommand "$_bin" "$_subcmd"; then
+			bin="${BASH_REMATCH[1]}"
+			subcmd="${BASH_REMATCH[2]}"
+			if ! is_safe_subcommand "$bin" "$subcmd"; then
 				OBSERVED_RULES="${OBSERVED_RULES}${rule}"$'\n'
 			fi
 		fi
 	done <<<"$RULES_FROM_LOG"
 	OBSERVED_RULES=$(echo "$OBSERVED_RULES" | sed '/^$/d' | sort -u)
-
-	# Indirection variants from the log
-	INDIRECTION_RULES=$(collect_indirection_variants)
 
 	# Build refined rule set: start with current, remove broad, add fine-grained
 	REFINED_RULES="$ALL_RULES"
@@ -216,8 +205,8 @@ compute_refined_rules() {
 	done <<<"$BROAD_RULES"
 
 	# Only include safe subcommand rules in the refined set.
-	# Observed non-safe commands and indirection variants are shown
-	# for informational purposes but require manual opt-in.
+	# Observed non-safe commands are shown for informational
+	# purposes but require manual opt-in.
 	REFINED_RULES=$(printf '%s\n%s' "$REFINED_RULES" "$SAFE_RULES" | sed '/^$/d' | sort -u)
 }
 
@@ -233,20 +222,23 @@ write_settings() {
 		echo '{}' >"$SETTINGS_FILE"
 	fi
 
-	TEMP=$(mktemp)
+	local temp
+	temp=$(mktemp)
+	trap 'rm -f "$temp"' RETURN
+
 	jq --argjson allow "$ALLOW_JSON" '
       .permissions //= {} |
       .permissions.allow = $allow
-    ' "$SETTINGS_FILE" >"$TEMP"
+    ' "$SETTINGS_FILE" >"$temp"
 
-	if jq empty "$TEMP" 2>/dev/null; then
+	if jq empty "$temp" 2>/dev/null; then
 		cp "$SETTINGS_FILE" "${SETTINGS_FILE}.bak"
-		mv "$TEMP" "$SETTINGS_FILE"
+		mv "$temp" "$SETTINGS_FILE"
+		trap - RETURN
 		echo "Updated $SETTINGS_FILE ($label)"
 		echo "Backup at ${SETTINGS_FILE}.bak"
 	else
 		echo "ERROR: Generated invalid JSON. Aborting."
-		rm -f "$TEMP"
 		exit 1
 	fi
 }
@@ -284,13 +276,6 @@ if [[ $REFINE -eq 1 ]]; then
 		echo "  (none)"
 	fi
 	echo ""
-
-	if [[ -n $INDIRECTION_RULES ]]; then
-		echo "Indirection variant rules (NOT included — add manually if needed):"
-		# shellcheck disable=SC2001
-		echo "$INDIRECTION_RULES" | sed 's/^/    /'
-		echo ""
-	fi
 
 	echo "=== Refined result ==="
 	echo "$REFINED_RULES" | jq -R -s 'split("\n") | map(select(length > 0))'
