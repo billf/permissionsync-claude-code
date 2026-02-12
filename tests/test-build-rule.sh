@@ -71,11 +71,17 @@ assert_rule "Bash" '{"command":"cargo publish"}' \
 assert_rule "Bash" '{"command":"sudo git push origin main"}' \
 	"Bash(git push *)" "git push" "false" "sudo"
 
+assert_rule "Bash" '{"command":"sudo --user root git status"}' \
+	"Bash(git status *)" "git status" "true" "sudo"
+
 assert_rule "Bash" '{"command":"env FOO=bar git status"}' \
 	"Bash(git status *)" "git status" "true" "env"
 
 assert_rule "Bash" '{"command":"xargs git log"}' \
 	"Bash(git log *)" "git log" "true" "xargs"
+
+assert_rule "Bash" '{"command":"xargs --max-args 1 git status"}' \
+	"Bash(git status *)" "git status" "true" "xargs"
 
 assert_rule "Bash" '{"command":"bash -c '\''git diff'\''"}' \
 	"Bash(git diff *)" "git diff" "true" "bash"

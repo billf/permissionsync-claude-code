@@ -45,6 +45,7 @@ assert_peeled "command git status" "git status" "command"
 
 # Prefix with flags
 assert_peeled "sudo -u root git push" "git push" "sudo"
+assert_peeled "sudo --user root git push" "git push" "sudo"
 
 # env (prefix_kv)
 assert_peeled "env git status" "git status" "env"
@@ -54,6 +55,7 @@ assert_peeled "env FOO=bar BAZ=qux git status" "git status" "env"
 # xargs
 assert_peeled "xargs git status" "git status" "xargs"
 assert_peeled "xargs -I {} git status" "git status" "xargs"
+assert_peeled "xargs --max-args 1 git status" "git status" "xargs"
 
 # shell -c
 assert_peeled "bash -c 'git status'" "git status" "bash"

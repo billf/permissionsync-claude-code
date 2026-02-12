@@ -78,6 +78,28 @@ get_indirection_type() {
 	esac
 }
 
+# get_indirection_flags_with_args WORD → flags that consume a separate argument
+# for the indirection wrapper named WORD.
+get_indirection_flags_with_args() {
+	case "$1" in
+	sudo)
+		echo "-u --user -g --group -h --host -p --prompt -C --close-from -c --command -r --role -t --type -R --chroot -D --chdir"
+		;;
+	nice)
+		echo "-n --adjustment"
+		;;
+	env)
+		echo "-C --chdir -S --split-string"
+		;;
+	xargs)
+		echo "-I --replace -L --max-lines -n --max-args -P --max-procs -s --max-chars -d --delimiter -E --eof -a --arg-file"
+		;;
+	*)
+		echo ""
+		;;
+	esac
+}
+
 # is_blocklisted_binary WORD → 0 if WORD is a shell/interpreter that should
 # never become a permission rule (allows arbitrary code execution).
 # Matches both bare names and absolute paths (e.g. bash, /bin/bash).

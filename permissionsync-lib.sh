@@ -56,13 +56,26 @@ peel_indirection() {
 			# Strip the command word and any flags with their arguments
 			cmd="${cmd#"$first_word"}"
 			cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+			local arg_flags
+			arg_flags=$(get_indirection_flags_with_args "$first_word")
 			while [[ $cmd == -* ]]; do
 				local flag="${cmd%% *}"
 				cmd="${cmd#"$flag"}"
 				cmd="${cmd#"${cmd%%[![:space:]]*}"}"
-				# If the flag is short (e.g. -u), consume its argument too
-				# unless next word also starts with - (another flag)
-				if [[ ${#flag} -eq 2 ]] && [[ $cmd != -* ]] && [[ -n $cmd ]]; then
+				# "--" ends wrapper options (next token is the wrapped command).
+				[[ $flag == "--" ]] && break
+				# Long --flag=value form already includes its value.
+				[[ $flag == --*=* ]] && continue
+
+				local takes_arg=0
+				local af
+				for af in $arg_flags; do
+					if [[ $af == "$flag" ]]; then
+						takes_arg=1
+						break
+					fi
+				done
+				if [[ $takes_arg -eq 1 ]] && [[ -n $cmd ]]; then
 					local flag_arg="${cmd%% *}"
 					cmd="${cmd#"$flag_arg"}"
 					cmd="${cmd#"${cmd%%[![:space:]]*}"}"
@@ -73,11 +86,31 @@ peel_indirection() {
 			# Strip the command word, then any KEY=VAL pairs and flags
 			cmd="${cmd#"$first_word"}"
 			cmd="${cmd#"${cmd%%[![:space:]]*}"}"
-			while [[ $cmd == *=* ]] || [[ $cmd == -* ]]; do
+			local arg_flags
+			arg_flags=$(get_indirection_flags_with_args "$first_word")
+			while [[ -n $cmd ]]; do
 				local next_word="${cmd%% *}"
-				if [[ $next_word == *=* ]] || [[ $next_word == -* ]]; then
+				if [[ $next_word == *=* ]]; then
 					cmd="${cmd#"$next_word"}"
 					cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+				elif [[ $next_word == -* ]]; then
+					cmd="${cmd#"$next_word"}"
+					cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+					[[ $next_word == "--" ]] && break
+					[[ $next_word == --*=* ]] && continue
+					local takes_arg=0
+					local af
+					for af in $arg_flags; do
+						if [[ $af == "$next_word" ]]; then
+							takes_arg=1
+							break
+						fi
+					done
+					if [[ $takes_arg -eq 1 ]] && [[ -n $cmd ]]; then
+						local flag_arg="${cmd%% *}"
+						cmd="${cmd#"$flag_arg"}"
+						cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+					fi
 				else
 					break
 				fi
@@ -113,12 +146,24 @@ peel_indirection() {
 			# Strip xargs + any flags with their arguments
 			cmd="${cmd#"$first_word"}"
 			cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+			local arg_flags
+			arg_flags=$(get_indirection_flags_with_args "$first_word")
 			while [[ $cmd == -* ]]; do
 				local flag="${cmd%% *}"
 				cmd="${cmd#"$flag"}"
 				cmd="${cmd#"${cmd%%[![:space:]]*}"}"
-				# Short flags (e.g. -I) consume the next word as argument
-				if [[ ${#flag} -eq 2 ]] && [[ $cmd != -* ]] && [[ -n $cmd ]]; then
+				[[ $flag == "--" ]] && break
+				[[ $flag == --*=* ]] && continue
+
+				local takes_arg=0
+				local af
+				for af in $arg_flags; do
+					if [[ $af == "$flag" ]]; then
+						takes_arg=1
+						break
+					fi
+				done
+				if [[ $takes_arg -eq 1 ]] && [[ -n $cmd ]]; then
 					local flag_arg="${cmd%% *}"
 					cmd="${cmd#"$flag_arg"}"
 					cmd="${cmd#"${cmd%%[![:space:]]*}"}"
