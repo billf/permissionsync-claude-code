@@ -10,14 +10,21 @@
 
   outputs = inputs@{ flake-parts, ... }:
     let
-      scripts = [
-        "install.sh"
+      # Scripts that are entry points — these get wrapped with makeWrapper
+      executableScripts = [
         "log-permission.sh"
         "log-permission-auto.sh"
         "sync-permissions.sh"
-        "permissionsync-config.sh"
-        "permissionsync-lib.sh"
+        "setup-hooks.sh"
       ];
+
+      # Scripts that are sourced by others — must NOT be wrapped
+      libraryScripts = [
+        "permissionsync-lib.sh"
+        "permissionsync-config.sh"
+      ];
+
+      allScripts = executableScripts ++ libraryScripts ++ [ "install.sh" ];
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [
@@ -26,6 +33,12 @@
         "x86_64-darwin"
         "aarch64-darwin"
       ];
+
+      flake = {
+        overlays.default = final: prev: {
+          permissionsync-cc = inputs.self.packages.${prev.system}.default;
+        };
+      };
 
       perSystem = { config, self', inputs', pkgs, system, ... }:
         let
@@ -51,26 +64,32 @@
             installPhase = ''
               runHook preInstall
 
-              # Raw (unwrapped) copies for install.sh to cp into ~/.claude/hooks/
+              # Raw (unwrapped) copies — used by setup-hooks.sh to cp into ~/.claude/hooks/
               mkdir -p $out/share/permissionsync-cc
-              for s in ${builtins.concatStringsSep " " scripts}; do
+              for s in ${builtins.concatStringsSep " " allScripts}; do
                 cp "$src/$s" "$out/share/permissionsync-cc/$s"
                 chmod +x "$out/share/permissionsync-cc/$s"
               done
 
-              # Wrapped copies in bin/ with runtime deps on PATH
               mkdir -p $out/bin
-              for s in ${builtins.concatStringsSep " " scripts}; do
+
+              # Library scripts go into bin/ UNwrapped (they get source'd, not exec'd)
+              for s in ${builtins.concatStringsSep " " libraryScripts}; do
+                cp "$src/$s" "$out/bin/$s"
+                chmod +x "$out/bin/$s"
+              done
+
+              # Executable scripts get wrapped with runtime deps on PATH
+              for s in ${builtins.concatStringsSep " " executableScripts}; do
                 cp "$src/$s" "$out/bin/$s"
                 chmod +x "$out/bin/$s"
                 wrapProgram "$out/bin/$s" \
                   --prefix PATH : "${pkgs.lib.makeBinPath runtimeDeps}"
               done
 
-              # Patch SCRIPT_DIR in the wrapped install.sh so it finds the
-              # raw scripts in share/ (for copying to ~/.claude/hooks/)
-              sed -i 's|SCRIPT_DIR=.*|SCRIPT_DIR="'"$out"'/share/permissionsync-cc"|' \
-                "$out/bin/.install.sh-wrapped"
+              # Patch setup-hooks.sh to find raw scripts in share/
+              sed -i 's|PERMISSIONSYNC_SHARE_DIR=.*|PERMISSIONSYNC_SHARE_DIR="'"$out"'/share/permissionsync-cc"|' \
+                "$out/bin/.setup-hooks.sh-wrapped"
 
               runHook postInstall
             '';
@@ -78,14 +97,14 @@
             meta = {
               description = "Log and sync Claude Code permission approvals";
               license = pkgs.lib.licenses.mit;
-              mainProgram = "install.sh";
+              mainProgram = "setup-hooks.sh";
             };
           };
 
           checks.tests = pkgs.stdenvNoCC.mkDerivation {
             name = "permissionsync-cc-tests";
             src = inputs.self;
-            nativeBuildInputs = [ pkgs.bash pkgs.jq ];
+            nativeBuildInputs = [ pkgs.bash pkgs.jq pkgs.diffutils ];
             dontBuild = true;
             doCheck = true;
             checkPhase = ''
