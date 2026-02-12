@@ -16,6 +16,40 @@ A `PermissionRequest` hook that:
 
 ## Install
 
+### Nix Flake
+
+Add as a flake input and call `setup-hooks.sh` from your devShell's `shellHook`:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    permissionsync-cc.url = "github:billgoode/permissionsync-cc";
+    permissionsync-cc.inputs.nixpkgs.follows = "nixpkgs";
+  };
+
+  outputs = { nixpkgs, permissionsync-cc, ... }:
+    let
+      system = "aarch64-darwin"; # adjust for your system
+      pkgs = nixpkgs.legacyPackages.${system};
+      psc = permissionsync-cc.packages.${system}.default;
+    in {
+      devShells.${system}.default = pkgs.mkShell {
+        shellHook = ''
+          ${psc}/bin/setup-hooks.sh      # log-only (default)
+          # ${psc}/bin/setup-hooks.sh auto  # auto-approve mode
+        '';
+      };
+    };
+}
+```
+
+The setup script is idempotent and silent — it only copies files when they've changed and skips settings.json when the hook entry already exists.
+
+An overlay is also available at `permissionsync-cc.overlays.default` if you prefer `pkgs.permissionsync-cc`.
+
+### Manual (no Nix)
+
 ```bash
 git clone <this-repo> && cd claude-permission-logger
 ./install.sh          # log-only mode
