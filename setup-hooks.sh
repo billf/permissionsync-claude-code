@@ -50,6 +50,8 @@ if [[ $MODE == "auto" ]]; then
 else
 	HOOK_CMD="$HOOKS_DIR/log-permission.sh"
 fi
+MANAGED_LOG_CMD="$HOOKS_DIR/log-permission.sh"
+MANAGED_AUTO_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
 
 # 3. Ensure settings.json has the PermissionRequest hook entry
 if [[ ! -f $SETTINGS ]]; then
@@ -58,32 +60,37 @@ if [[ ! -f $SETTINGS ]]; then
 	changed=1
 fi
 
-ALREADY_INSTALLED=$(jq --arg cmd "$HOOK_CMD" \
-	'[.hooks.PermissionRequest[]?.hooks[]? | select(.command == $cmd)] | length' \
-	"$SETTINGS" 2>/dev/null || echo "0")
-
-if [[ $ALREADY_INSTALLED -eq 0 ]]; then
-	HOOK_ENTRY=$(jq -nc --arg cmd "$HOOK_CMD" '{
-    "matcher": "*",
-    "hooks": [{"type": "command", "command": $cmd}]
-  }')
-
-	TEMP=$(mktemp)
-	jq --argjson entry "$HOOK_ENTRY" '
+TEMP=$(mktemp)
+if ! jq \
+	--arg cmd "$HOOK_CMD" \
+	--arg managed_log "$MANAGED_LOG_CMD" \
+	--arg managed_auto "$MANAGED_AUTO_CMD" '
     .hooks //= {} |
     .hooks.PermissionRequest //= [] |
-    .hooks.PermissionRequest += [$entry]
-  ' "$SETTINGS" >"$TEMP"
+    .hooks.PermissionRequest = (
+      [
+        .hooks.PermissionRequest[]
+        | select(
+            ([.hooks[]?.command] | any(. == $managed_log or . == $managed_auto))
+            | not
+          )
+      ] + [{
+        matcher: "*",
+        hooks: [{type: "command", command: $cmd}]
+      }]
+    )
+  ' "$SETTINGS" >"$TEMP"; then
+	echo "permissionsync-cc: ERROR: failed to update $SETTINGS" >&2
+	rm -f "$TEMP"
+	exit 1
+fi
 
-	if jq empty "$TEMP" 2>/dev/null; then
-		cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
-		mv "$TEMP" "$SETTINGS"
-		changed=1
-	else
-		echo "permissionsync-cc: ERROR: failed to update $SETTINGS" >&2
-		rm -f "$TEMP"
-		exit 1
-	fi
+if ! cmp -s "$SETTINGS" "$TEMP"; then
+	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+	mv "$TEMP" "$SETTINGS"
+	changed=1
+else
+	rm -f "$TEMP"
 fi
 
 # 4. Report only when something changed

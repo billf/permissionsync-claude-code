@@ -53,6 +53,8 @@ echo "TAP version 13"
 reset_home() {
 	rm -rf "$TEST_HOME"
 	TEST_HOME="$(mktemp -d)"
+	expected_log="$TEST_HOME/.claude/hooks/log-permission.sh"
+	expected_auto="CLAUDE_PERMISSION_AUTO=1 $TEST_HOME/.claude/hooks/log-permission-auto.sh"
 }
 
 reset_home
@@ -80,7 +82,7 @@ assert_file_exists "log mode: creates settings.json" \
 hook_cmd=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
 	"$TEST_HOME/.claude/settings.json")
 assert_eq "log mode: hook command points to log-permission.sh" \
-	"$TEST_HOME/.claude/hooks/log-permission.sh" "$hook_cmd"
+	"$expected_log" "$hook_cmd"
 
 matcher=$(jq -r '.hooks.PermissionRequest[0].matcher' \
 	"$TEST_HOME/.claude/settings.json")
@@ -100,7 +102,6 @@ run_setup auto >/dev/null
 
 hook_cmd_auto=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
 	"$TEST_HOME/.claude/settings.json")
-expected_auto="CLAUDE_PERMISSION_AUTO=1 $TEST_HOME/.claude/hooks/log-permission-auto.sh"
 assert_eq "auto mode: hook command includes CLAUDE_PERMISSION_AUTO=1" \
 	"$expected_auto" "$hook_cmd_auto"
 
@@ -113,7 +114,39 @@ hook_count=$(jq '[.hooks.PermissionRequest[].hooks[]] | length' \
 	"$TEST_HOME/.claude/settings.json")
 assert_eq "no duplicate hook entries after repeated runs" "1" "$hook_count"
 
-# --- Test 7: Preserves existing settings.json content ---
+# --- Test 7: Switching modes updates the single managed entry (log -> auto) ---
+reset_home
+run_setup log >/dev/null
+switch_out=$(run_setup auto)
+
+hook_count_switch=$(jq '[.hooks.PermissionRequest[].hooks[]] | length' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "log->auto keeps one hook entry" "1" "$hook_count_switch"
+
+hook_cmd_switch=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "log->auto updates hook command" "$expected_auto" "$hook_cmd_switch"
+
+assert_eq "log->auto reports installation" \
+	"permissionsync-cc: hooks installed (auto mode)" "$switch_out"
+
+# --- Test 8: Switching modes updates the single managed entry (auto -> log) ---
+reset_home
+run_setup auto >/dev/null
+switch_back_out=$(run_setup log)
+
+hook_count_switch_back=$(jq '[.hooks.PermissionRequest[].hooks[]] | length' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "auto->log keeps one hook entry" "1" "$hook_count_switch_back"
+
+hook_cmd_switch_back=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "auto->log updates hook command" "$expected_log" "$hook_cmd_switch_back"
+
+assert_eq "auto->log reports installation" \
+	"permissionsync-cc: hooks installed (log mode)" "$switch_back_out"
+
+# --- Test 9: Preserves existing settings.json content ---
 reset_home
 mkdir -p "$TEST_HOME/.claude"
 echo '{"permissions":{"allow":["Bash(git *)"]}}' >"$TEST_HOME/.claude/settings.json"
@@ -125,7 +158,42 @@ assert_eq "preserves existing settings content" "Bash(git *)" "$existing_perm"
 has_hook=$(jq '.hooks.PermissionRequest | length' "$TEST_HOME/.claude/settings.json")
 assert_eq "adds hook alongside existing settings" "1" "$has_hook"
 
-# --- Test 8: Creates backup on first settings.json modification ---
+# --- Test 10: Collapses pre-existing managed duplicates, keeps non-managed ---
+reset_home
+mkdir -p "$TEST_HOME/.claude"
+cat >"$TEST_HOME/.claude/settings.json" <<EOF
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [{"type": "command", "command": "$expected_log"}]
+      },
+      {
+        "matcher": "*",
+        "hooks": [{"type": "command", "command": "$expected_auto"}]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [{"type": "command", "command": "/tmp/custom-hook.sh"}]
+      }
+    ]
+  }
+}
+EOF
+run_setup log >/dev/null
+
+managed_count=$(jq --arg log "$expected_log" --arg auto "$expected_auto" \
+	'[.hooks.PermissionRequest[]?.hooks[]?.command | select(. == $log or . == $auto)] | length' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "managed duplicates collapse to one entry" "1" "$managed_count"
+
+custom_count=$(jq \
+	'[.hooks.PermissionRequest[]?.hooks[]?.command | select(. == "/tmp/custom-hook.sh")] | length' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "non-managed hook entry is preserved" "1" "$custom_count"
+
+# --- Test 11: Creates backup on first settings.json modification ---
 reset_home
 mkdir -p "$TEST_HOME/.claude"
 echo '{}' >"$TEST_HOME/.claude/settings.json"

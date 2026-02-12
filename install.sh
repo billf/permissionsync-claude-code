@@ -42,41 +42,46 @@ else
 	HOOK_CMD="$HOOKS_DIR/log-permission.sh"
 	echo "✓ Mode: log-only (manual approval still required)"
 fi
+MANAGED_LOG_CMD="$HOOKS_DIR/log-permission.sh"
+MANAGED_AUTO_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
 
 # 3. Merge hook config into settings.json
 if [[ ! -f $SETTINGS ]]; then
 	echo '{}' >"$SETTINGS"
 fi
 
-# Check if PermissionRequest hook already exists
-EXISTING=$(jq '.hooks.PermissionRequest // []' "$SETTINGS" 2>/dev/null || echo '[]')
-ALREADY_INSTALLED=$(echo "$EXISTING" | jq --arg cmd "$HOOK_CMD" '[.[] | .hooks[]? | select(.command == $cmd)] | length')
-
-if [[ $ALREADY_INSTALLED -gt 0 ]]; then
-	echo "✓ Hook already installed in $SETTINGS"
-else
-	# Build the new hook entry
-	HOOK_ENTRY=$(jq -nc --arg cmd "$HOOK_CMD" '{
-    "matcher": "*",
-    "hooks": [{"type": "command", "command": $cmd}]
-  }')
-
-	TEMP=$(mktemp)
-	jq --argjson entry "$HOOK_ENTRY" '
+TEMP=$(mktemp)
+if ! jq \
+	--arg cmd "$HOOK_CMD" \
+	--arg managed_log "$MANAGED_LOG_CMD" \
+	--arg managed_auto "$MANAGED_AUTO_CMD" '
     .hooks //= {} |
     .hooks.PermissionRequest //= [] |
-    .hooks.PermissionRequest += [$entry]
-  ' "$SETTINGS" >"$TEMP"
+    .hooks.PermissionRequest = (
+      [
+        .hooks.PermissionRequest[]
+        | select(
+            ([.hooks[]?.command] | any(. == $managed_log or . == $managed_auto))
+            | not
+          )
+      ] + [{
+        matcher: "*",
+        hooks: [{type: "command", command: $cmd}]
+      }]
+    )
+  ' "$SETTINGS" >"$TEMP"; then
+	echo "ERROR: Failed to update $SETTINGS"
+	rm -f "$TEMP"
+	exit 1
+fi
 
-	if jq empty "$TEMP" 2>/dev/null; then
-		cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
-		mv "$TEMP" "$SETTINGS"
-		echo "✓ Added PermissionRequest hook to $SETTINGS"
-	else
-		echo "ERROR: Failed to update $SETTINGS"
-		rm -f "$TEMP"
-		exit 1
-	fi
+if ! cmp -s "$SETTINGS" "$TEMP"; then
+	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+	mv "$TEMP" "$SETTINGS"
+	echo "✓ Updated PermissionRequest hook in $SETTINGS"
+else
+	rm -f "$TEMP"
+	echo "✓ Hook already installed in $SETTINGS"
 fi
 
 echo ""
