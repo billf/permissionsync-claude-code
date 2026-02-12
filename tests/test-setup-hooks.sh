@@ -10,7 +10,6 @@ FAIL=0
 TEST_NUM=0
 
 # Use a temp HOME so we never touch the real ~/.claude/
-REAL_HOME="$HOME"
 TEST_HOME="$(mktemp -d)"
 cleanup() { rm -rf "$TEST_HOME"; }
 trap cleanup EXIT
