@@ -185,6 +185,29 @@ assert_rule "Bash" '{"command":"git log >(tee /tmp/out)"}' \
 assert_rule "Bash" '{"command":"git log <(echo foo)"}' \
 	"Bash(git log *)" "git log" "false" ""
 
+# --- SEC-03: I/O redirections should prevent IS_SAFE ---
+assert_rule "Bash" '{"command":"git log > /tmp/out"}' \
+	"Bash(git log *)" "git log" "false" ""
+
+assert_rule "Bash" '{"command":"git status >> /tmp/append"}' \
+	"Bash(git status *)" "git status" "false" ""
+
+assert_rule "Bash" '{"command":"git log < /dev/null"}' \
+	"Bash(git log *)" "git log" "false" ""
+
+assert_rule "Bash" '{"command":"git log 2>&1 > /tmp/out"}' \
+	"Bash(git log *)" "git log" "false" ""
+
+assert_rule "Bash" '{"command":"git log &>/tmp/out"}' \
+	"Bash(git log *)" "git log" "false" ""
+
+assert_rule "Bash" '{"command":"git status <<< injected"}' \
+	"Bash(git status *)" "git status" "false" ""
+
+# --- SEC-04: Background operator & should prevent IS_SAFE ---
+assert_rule "Bash" '{"command":"git status &"}' \
+	"Bash(git status *)" "git status" "false" ""
+
 # --- SEC-08: Multiline commands should never be IS_SAFE ---
 assert_rule "Bash" "$(printf '{"command":"git status\\nwhoami"}')" \
 	"Bash(git status *)" "git status" "false" ""

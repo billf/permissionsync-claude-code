@@ -210,6 +210,27 @@ build_rule_v2() {
 				has_metachar=1
 				;;
 			esac
+			# SEC-03: I/O redirections can write to arbitrary files
+			# (e.g. "git log > /tmp/stolen" would exfiltrate data)
+			case "$first_line" in
+			*'>>'* | *'&>'* | *'<<<'* | *'2>'*)
+				has_metachar=1
+				;;
+			esac
+			# Check for standalone > or < (not part of >>, &>, 2>, <<<, >(, <(
+			# which are already caught above)
+			local _redir_pat='[^>>&<]>[^>]|^>[^>]|[^<]<[^<(]|^<[^<(]'
+			if [[ $first_line =~ $_redir_pat ]]; then
+				has_metachar=1
+			fi
+			# SEC-04: Background operator & (but not &&, already caught)
+			# Strip all && first, then check for remaining &
+			local _fl_bg="${first_line//&&/}"
+			case "$_fl_bg" in
+			*'&'*)
+				has_metachar=1
+				;;
+			esac
 
 			# Peel indirection wrappers
 			peel_indirection "$first_line"
