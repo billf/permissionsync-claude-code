@@ -29,6 +29,14 @@ eval "$(jq -r '@sh "TOOL_NAME=\(.tool_name // "") TOOL_INPUT=\(.tool_input // {}
 # --- Build the permission rule using the shared library ---
 build_rule_v2 "$TOOL_NAME" "$TOOL_INPUT"
 
+# --- Snapshot whether this rule existed before this invocation ---
+SEEN_BEFORE=0
+if [[ $AUTO_MODE == "1" ]] && [[ -f $LOG_FILE ]]; then
+	if grep -qF "\"rule\":\"${RULE}\"" "$LOG_FILE" 2>/dev/null; then
+		SEEN_BEFORE=1
+	fi
+fi
+
 # --- Log the request ---
 mkdir -p "$(dirname "$LOG_FILE")"
 jq -nc \
@@ -56,10 +64,9 @@ if [[ $IS_SAFE == "true" ]]; then
 fi
 
 # --- Auto-approve mode: if this rule was previously approved, allow it ---
-if [[ $AUTO_MODE == "1" ]] && [[ -f $LOG_FILE ]]; then
-	if grep -qF "\"rule\":\"${RULE}\"" "$LOG_FILE" 2>/dev/null; then
-		# We've seen and (presumably) approved this before — auto-allow
-		jq -nc '{
+if [[ $AUTO_MODE == "1" ]] && [[ $SEEN_BEFORE -eq 1 ]]; then
+	# We've seen and (presumably) approved this before — auto-allow
+	jq -nc '{
       "hookSpecificOutput": {
         "hookEventName": "PermissionRequest",
         "decision": {
@@ -67,8 +74,7 @@ if [[ $AUTO_MODE == "1" ]] && [[ -f $LOG_FILE ]]; then
         }
       }
     }'
-		exit 0
-	fi
+	exit 0
 fi
 
 # --- Default: fall through to interactive prompt ---
