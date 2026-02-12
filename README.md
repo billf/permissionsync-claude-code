@@ -58,8 +58,8 @@ The installer adds a `PermissionRequest` hook entry to `~/.claude/settings.json`
 Just use Claude Code normally. Every time you see a permission prompt and approve it, the hook logs:
 
 ```jsonl
-{"timestamp":"2026-02-06T15:30:00Z","tool":"Bash","rule":"Bash(npm *)","cwd":"/home/you/project-a"}
-{"timestamp":"2026-02-06T15:31:00Z","tool":"Bash","rule":"Bash(git *)","cwd":"/home/you/project-b"}
+{"timestamp":"2026-02-06T15:30:00Z","tool":"Bash","rule":"Bash(npm run *)","cwd":"/home/you/project-a"}
+{"timestamp":"2026-02-06T15:31:00Z","tool":"Bash","rule":"Bash(git status *)","cwd":"/home/you/project-b"}
 {"timestamp":"2026-02-06T15:32:00Z","tool":"Write","rule":"Write","cwd":"/home/you/project-a"}
 ```
 
@@ -70,14 +70,14 @@ Just use Claude Code normally. Every time you see a permission prompt and approv
 ~/.claude/hooks/sync-permissions.sh --preview
 
 # === Current rules in ~/.claude/settings.json ===
-#   Bash(git *)
+#   Bash(git status *)
 #
 # === New rules from approval log ===
-#   + Bash(npm *)
+#   + Bash(npm run *)
 #   + Write
 #
 # === Merged result ===
-# ["Bash(git *)", "Bash(npm *)", "Write"]
+# ["Bash(git status *)", "Bash(npm run *)", "Write"]
 
 # Apply
 ~/.claude/hooks/sync-permissions.sh --apply
@@ -100,13 +100,14 @@ This sets `CLAUDE_PERMISSION_AUTO=1`, which makes the hook auto-approve any rule
 
 | Tool | Input field | Generated rule |
 |------|------------|----------------|
-| `Bash` | `command: "npm run test"` | `Bash(npm *)` |
-| `Bash` | `command: "git commit -m 'fix'"` | `Bash(git *)` |
+| `Bash` | `command: "npm run test"` | `Bash(npm run *)` |
+| `Bash` | `command: "git commit -m 'fix'"` | `Bash(git commit *)` |
+| `Bash` | `command: "cat file.txt"` | `Bash(cat *)` |
 | `Read` / `Write` / `Edit` | `file_path: ...` | `Read` / `Write` / `Edit` |
 | `WebFetch` | `url: "https://docs.anthropic.com/..."` | `WebFetch(domain:docs.anthropic.com)` |
 | `mcp__*` | — | `mcp__server__tool` (exact) |
 
-The default strategy extracts the first word of Bash commands and creates `Bash(<binary> *)` wildcard rules. This gives good coverage without being overly permissive. You can always edit `~/.claude/settings.json` after sync to tighten or loosen rules.
+For tracked multi-subcommand tools (`git`, `cargo`, `npm`, `nix`, etc.), the strategy emits `Bash(<binary> <subcommand> *)`. For untracked tools, it falls back to `Bash(<binary> *)`. Indirection wrappers like `sudo`, `env`, `xargs`, and `bash -c` are peeled before extraction. You can always edit `~/.claude/settings.json` after sync to tighten or loosen rules.
 
 ## Tips
 
@@ -147,5 +148,5 @@ jq -r 'select(.cwd | contains("/path/to/project")) | .rule' \
 ## Caveats
 
 - The `PermissionRequest` hook fires when Claude *requests* permission, not after you approve. In log-only mode this means you'll log requests you *deny* too. The sync script doesn't distinguish — review with `--preview` before `--apply`.
-- If you want finer-grained control (e.g., `Bash(npm run test)` instead of `Bash(npm *)`), edit the JSONL or the generated `settings.json` after sync.
+- If you want finer-grained control (e.g., exact argument patterns instead of wildcard `*`), edit the JSONL or the generated `settings.json` after sync.
 - Hook config changes require a session restart to take effect per Claude Code's security model.
