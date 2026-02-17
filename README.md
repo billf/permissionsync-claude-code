@@ -24,7 +24,7 @@ Add as a flake input and call `setup-hooks.sh` from your devShell's `shellHook`:
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    permissionsync-cc.url = "github:billgoode/permissionsync-cc";
+    permissionsync-cc.url = "github:billf/permissionsync-cc";
     permissionsync-cc.inputs.nixpkgs.follows = "nixpkgs";
   };
 
