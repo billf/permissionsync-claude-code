@@ -15,6 +15,7 @@
         "log-permission.sh"
         "log-permission-auto.sh"
         "sync-permissions.sh"
+        "worktree-sync.sh"
         "setup-hooks.sh"
       ];
 
@@ -48,6 +49,7 @@
             pkgs.gnused
             pkgs.gnugrep
             pkgs.diffutils
+            pkgs.git
           ];
         in
         {
@@ -104,7 +106,7 @@
           checks.tests = pkgs.stdenvNoCC.mkDerivation {
             name = "permissionsync-cc-tests";
             src = inputs.self;
-            nativeBuildInputs = [ pkgs.bash pkgs.jq pkgs.diffutils ];
+            nativeBuildInputs = [ pkgs.bash pkgs.jq pkgs.diffutils pkgs.git ];
             dontBuild = true;
             doCheck = true;
             checkPhase = ''
