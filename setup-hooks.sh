@@ -9,12 +9,14 @@
 # changes.
 #
 # Usage:
-#   setup-hooks.sh           # log-only mode (default)
-#   setup-hooks.sh auto      # auto-approve previously-seen rules
+#   setup-hooks.sh              # log-only mode (default)
+#   setup-hooks.sh auto         # auto-approve previously-seen rules
+#   setup-hooks.sh worktree     # auto-approve + sibling worktree rules
 #
 # When called from a Nix flake shellHook:
-#   ${psc}/bin/setup-hooks.sh        # log mode
-#   ${psc}/bin/setup-hooks.sh auto   # auto mode
+#   ${psc}/bin/setup-hooks.sh            # log mode
+#   ${psc}/bin/setup-hooks.sh auto       # auto mode
+#   ${psc}/bin/setup-hooks.sh worktree   # worktree mode
 
 set -euo pipefail
 
@@ -30,6 +32,7 @@ SCRIPTS=(
 	log-permission.sh
 	log-permission-auto.sh
 	sync-permissions.sh
+	worktree-sync.sh
 )
 
 changed=0
@@ -45,13 +48,20 @@ for s in "${SCRIPTS[@]}"; do
 done
 
 # 2. Determine hook command based on mode
-if [[ $MODE == "auto" ]]; then
+case "$MODE" in
+auto)
 	HOOK_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
-else
+	;;
+worktree)
+	HOOK_CMD="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
+	;;
+*)
 	HOOK_CMD="$HOOKS_DIR/log-permission.sh"
-fi
+	;;
+esac
 MANAGED_LOG_CMD="$HOOKS_DIR/log-permission.sh"
 MANAGED_AUTO_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
+MANAGED_WORKTREE_CMD="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
 
 # 3. Ensure settings.json has the PermissionRequest hook entry
 if [[ ! -f $SETTINGS ]]; then
@@ -64,16 +74,23 @@ TEMP=$(mktemp)
 if ! jq \
 	--arg cmd "$HOOK_CMD" \
 	--arg managed_log "$MANAGED_LOG_CMD" \
-	--arg managed_auto "$MANAGED_AUTO_CMD" '
+	--arg managed_auto "$MANAGED_AUTO_CMD" \
+	--arg managed_worktree "$MANAGED_WORKTREE_CMD" '
     .hooks //= {} |
     .hooks.PermissionRequest //= [] |
     .hooks.PermissionRequest = (
       [
         .hooks.PermissionRequest[]
-        | select(
-            ([.hooks[]?.command] | any(. == $managed_log or . == $managed_auto))
-            | not
+        | .hooks = (
+            (.hooks // [])
+            | map(
+                select(
+                  (.command == $managed_log or .command == $managed_auto or .command == $managed_worktree)
+                  | not
+                )
+              )
           )
+        | select((.hooks | length) > 0)
       ] + [{
         matcher: "*",
         hooks: [{type: "command", command: $cmd}]

@@ -193,7 +193,80 @@ custom_count=$(jq \
 	"$TEST_HOME/.claude/settings.json")
 assert_eq "non-managed hook entry is preserved" "1" "$custom_count"
 
-# --- Test 11: Creates backup on first settings.json modification ---
+# --- Test 11: Preserves non-managed hooks in mixed entries ---
+reset_home
+mkdir -p "$TEST_HOME/.claude"
+cat >"$TEST_HOME/.claude/settings.json" <<EOF
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {"type": "command", "command": "$expected_log"},
+          {"type": "command", "command": "/tmp/custom-mixed-hook.sh"}
+        ]
+      }
+    ]
+  }
+}
+EOF
+run_setup auto >/dev/null
+
+mixed_managed_count=$(jq --arg log "$expected_log" --arg auto "$expected_auto" \
+	'[.hooks.PermissionRequest[]?.hooks[]?.command | select(. == $log or . == $auto)] | length' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "mixed entry still has one managed hook" "1" "$mixed_managed_count"
+
+mixed_managed_cmd=$(jq -r --arg log "$expected_log" --arg auto "$expected_auto" \
+	'[.hooks.PermissionRequest[]?.hooks[]?.command | select(. == $log or . == $auto)][0]' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "mixed entry updates managed hook command" "$expected_auto" "$mixed_managed_cmd"
+
+mixed_custom_count=$(jq \
+	'[.hooks.PermissionRequest[]?.hooks[]?.command | select(. == "/tmp/custom-mixed-hook.sh")] | length' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "mixed entry keeps custom hook" "1" "$mixed_custom_count"
+
+# --- Test 12: Worktree mode sets correct hook command ---
+reset_home
+expected_worktree="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $TEST_HOME/.claude/hooks/log-permission-auto.sh"
+run_setup worktree >/dev/null
+
+hook_cmd_worktree=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "worktree mode: hook command includes CLAUDE_PERMISSION_WORKTREE=1" \
+	"$expected_worktree" "$hook_cmd_worktree"
+
+# --- Test 13: Worktree mode copies worktree-sync.sh ---
+assert_file_exists "worktree mode: creates worktree-sync.sh" \
+	"$TEST_HOME/.claude/hooks/worktree-sync.sh"
+
+# --- Test 14: Switching auto->worktree keeps one hook entry ---
+reset_home
+expected_worktree="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $TEST_HOME/.claude/hooks/log-permission-auto.sh"
+run_setup auto >/dev/null
+run_setup worktree >/dev/null
+
+hook_count_wt=$(jq '[.hooks.PermissionRequest[].hooks[]] | length' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "auto->worktree keeps one hook entry" "1" "$hook_count_wt"
+
+hook_cmd_wt_switch=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "auto->worktree updates hook command" "$expected_worktree" "$hook_cmd_wt_switch"
+
+# --- Test 15: Switching worktree->log keeps one hook entry ---
+run_setup log >/dev/null
+
+hook_count_wt_log=$(jq '[.hooks.PermissionRequest[].hooks[]] | length' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "worktree->log keeps one hook entry" "1" "$hook_count_wt_log"
+
+hook_cmd_wt_log=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "worktree->log updates hook command" "$expected_log" "$hook_cmd_wt_log"
+
 reset_home
 mkdir -p "$TEST_HOME/.claude"
 echo '{}' >"$TEST_HOME/.claude/settings.json"
