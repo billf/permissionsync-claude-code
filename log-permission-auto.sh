@@ -8,8 +8,9 @@
 #    to approve anything previously seen.
 #
 # Environment:
-#   CLAUDE_PERMISSION_LOG   - override log path (default: ~/.claude/permission-approvals.jsonl)
-#   CLAUDE_PERMISSION_AUTO  - set to "1" to auto-approve any rule already in the log
+#   CLAUDE_PERMISSION_LOG       - override log path (default: ~/.claude/permission-approvals.jsonl)
+#   CLAUDE_PERMISSION_AUTO      - set to "1" to auto-approve any rule already in the log
+#   CLAUDE_PERMISSION_WORKTREE  - set to "1" to auto-approve rules from sibling worktrees
 
 set -euo pipefail
 
@@ -61,6 +62,26 @@ if [[ $IS_SAFE == "true" ]]; then
       }
     }'
 	exit 0
+fi
+
+# --- Sibling worktree auto-approve ---
+WORKTREE_MODE="${CLAUDE_PERMISSION_WORKTREE:-0}"
+if [[ $WORKTREE_MODE == "1" ]]; then
+	if is_in_worktree; then
+		if read_sibling_rules; then
+			if echo "$SIBLING_RULES" | grep -qxF "$RULE"; then
+				jq -nc '{
+              "hookSpecificOutput": {
+                "hookEventName": "PermissionRequest",
+                "decision": {
+                  "behavior": "allow"
+                }
+              }
+            }'
+				exit 0
+			fi
+		fi
+	fi
 fi
 
 # --- Auto-approve mode: if this rule was previously approved, allow it ---
