@@ -205,6 +205,132 @@ has_subcommands() {
 	[[ -n $safe_list ]]
 }
 
+# is_in_worktree
+#
+# Fast guard — returns 0 if we're in a git worktree (either a linked worktree
+# or the main worktree with siblings). Avoids the cost of `git worktree list`
+# on every hook invocation when there are no worktrees.
+# Returns 1 if not in a git repo or no worktrees exist.
+is_in_worktree() {
+	local git_dir common_dir
+	git_dir=$(git rev-parse --git-dir 2>/dev/null) || return 1
+	common_dir=$(git rev-parse --git-common-dir 2>/dev/null) || return 1
+
+	# Resolve to absolute paths for reliable comparison
+	git_dir=$(cd "$git_dir" && pwd)
+	common_dir=$(cd "$common_dir" && pwd)
+
+	if [[ $git_dir != "$common_dir" ]]; then
+		# We're in a linked worktree (.git is a file pointing elsewhere)
+		return 0
+	fi
+
+	# We're in the main worktree — check if siblings exist
+	if [[ -d "${common_dir}/worktrees" ]]; then
+		# Check if the worktrees/ dir has any entries
+		local entries
+		entries=$(ls -A "${common_dir}/worktrees" 2>/dev/null)
+		if [[ -n $entries ]]; then
+			return 0
+		fi
+	fi
+
+	return 1
+}
+
+# discover_worktrees [EXCLUDE_CURRENT]
+#
+# Parses `git worktree list --porcelain` to extract worktree paths.
+# Skips bare repos and paths that don't exist on disk.
+# If EXCLUDE_CURRENT=1 (default), omits the current worktree.
+# Sets:
+#   WORKTREE_PATHS — indexed array of worktree paths
+#   WORKTREE_COUNT — number of paths found
+# Bash 3.2 compatible (indexed arrays, not associative).
+# shellcheck disable=SC2034
+discover_worktrees() {
+	local exclude_current="${1:-1}"
+	WORKTREE_PATHS=()
+	WORKTREE_COUNT=0
+
+	local current_wt
+	current_wt=$(git rev-parse --show-toplevel 2>/dev/null) || return 1
+
+	local line wt_path is_bare
+	is_bare=0
+	wt_path=""
+
+	while IFS= read -r line || [[ -n $line ]]; do
+		case "$line" in
+		"worktree "*)
+			wt_path="${line#worktree }"
+			is_bare=0
+			;;
+		"bare")
+			is_bare=1
+			;;
+		"")
+			# End of a worktree block — process it
+			if [[ -n $wt_path ]] && [[ $is_bare -eq 0 ]] && [[ -d $wt_path ]]; then
+				if [[ $exclude_current -eq 1 ]] && [[ $wt_path == "$current_wt" ]]; then
+					: # skip current
+				else
+					WORKTREE_PATHS+=("$wt_path")
+				fi
+			fi
+			wt_path=""
+			is_bare=0
+			;;
+		esac
+	done < <(git worktree list --porcelain 2>/dev/null)
+
+	# Process the last block (git output may not end with a blank line)
+	if [[ -n $wt_path ]] && [[ $is_bare -eq 0 ]] && [[ -d $wt_path ]]; then
+		if [[ $exclude_current -eq 1 ]] && [[ $wt_path == "$current_wt" ]]; then
+			: # skip current
+		else
+			WORKTREE_PATHS+=("$wt_path")
+		fi
+	fi
+
+	WORKTREE_COUNT=${#WORKTREE_PATHS[@]}
+}
+
+# read_sibling_rules
+#
+# Reads permission rules from sibling worktrees' .claude/settings.local.json.
+# Calls discover_worktrees 1 (exclude current) to get sibling paths.
+# For each sibling, extracts permissions.allow[] via jq.
+# Deduplicates with sort -u.
+# Sets:
+#   SIBLING_RULES      — newline-separated unique rules
+#   SIBLING_RULE_COUNT — number of unique rules found
+# Returns 1 if no sibling worktrees exist or no rules found.
+# shellcheck disable=SC2034
+read_sibling_rules() {
+	discover_worktrees 1 || return 1
+	[[ $WORKTREE_COUNT -eq 0 ]] && return 1
+
+	local all_rules="" i settings_file rules
+	for ((i = 0; i < WORKTREE_COUNT; i++)); do
+		settings_file="${WORKTREE_PATHS[$i]}/.claude/settings.local.json"
+		[[ -f $settings_file ]] || continue
+		rules=$(jq -r '.permissions.allow[]? // empty' "$settings_file" 2>/dev/null) || continue
+		if [[ -n $rules ]]; then
+			all_rules="${all_rules}${rules}"$'\n'
+		fi
+	done
+
+	SIBLING_RULES=$(echo "$all_rules" | sed '/^$/d' | sort -u)
+	if [[ -z $SIBLING_RULES ]]; then
+		SIBLING_RULE_COUNT=0
+		return 1
+	fi
+
+	SIBLING_RULE_COUNT=$(echo "$SIBLING_RULES" | wc -l | tr -d ' ')
+	return 0
+}
+
 # build_rule_v2 TOOL_NAME TOOL_INPUT_JSON
 #
 # Builds a permission rule string from a tool invocation.
