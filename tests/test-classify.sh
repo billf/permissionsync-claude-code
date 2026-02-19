@@ -120,10 +120,24 @@ assert_not_safe "nix" "develop"
 assert_not_safe "nix" "shell"
 assert_not_safe "nix" "flake"
 
+# gh safe subcommands (read-only)
+assert_safe "gh" "status"
+assert_safe "gh" "search"
+assert_safe "gh" "help"
+assert_safe "gh" "version"
+
+# gh unsafe subcommands (contain write operations)
+assert_not_safe "gh" "pr"
+assert_not_safe "gh" "issue"
+assert_not_safe "gh" "repo"
+assert_not_safe "gh" "release"
+assert_not_safe "gh" "api"
+
 # Unknown binary
 assert_not_safe "unknown_tool" "whatever"
 
 # has_subcommands
+assert_has_subcommands "gh"
 assert_has_subcommands "git"
 assert_has_subcommands "cargo"
 assert_has_subcommands "npm"

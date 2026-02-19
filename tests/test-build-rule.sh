@@ -67,6 +67,22 @@ assert_rule "Bash" '{"command":"cargo check --workspace"}' \
 assert_rule "Bash" '{"command":"cargo publish"}' \
 	"Bash(cargo publish *)" "cargo publish" "false" ""
 
+# --- Bash: gh subcommand tracking ---
+assert_rule "Bash" '{"command":"gh pr view #123"}' \
+	"Bash(gh pr *)" "gh pr" "false" ""
+
+assert_rule "Bash" '{"command":"gh status"}' \
+	"Bash(gh status *)" "gh status" "true" ""
+
+assert_rule "Bash" '{"command":"gh issue list"}' \
+	"Bash(gh issue *)" "gh issue" "false" ""
+
+assert_rule "Bash" '{"command":"gh search repos --query test"}' \
+	"Bash(gh search *)" "gh search" "true" ""
+
+assert_rule "Bash" '{"command":"gh api repos/foo/bar"}' \
+	"Bash(gh api *)" "gh api" "false" ""
+
 # --- Bash: indirection ---
 assert_rule "Bash" '{"command":"sudo git push origin main"}' \
 	"Bash(git push *)" "git push" "false" "sudo"
