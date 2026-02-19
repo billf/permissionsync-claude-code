@@ -46,6 +46,13 @@ get_safe_subcommands() {
 	brew)
 		echo "list info search outdated deps leaves config"
 		;;
+	gh)
+		# Truly read-only first-level subcommands only. Excluded:
+		#   pr, issue, repo, release, gist, label, cache, run, workflow
+		#   — each contains both read and write sub-subcommands
+		#   api — can make POST/DELETE requests
+		echo "status search help version"
+		;;
 	*)
 		echo ""
 		;;

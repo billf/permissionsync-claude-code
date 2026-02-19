@@ -49,26 +49,32 @@ fi
 
 # --- Extract unique rules from the log, filtering out garbage ---
 # Valid permission rules are either:
-#   ToolName(args...)  — e.g. Bash(git *), WebFetch(domain:example.com)
-#   ToolName           — bare tool name (Read, Write, Edit, MultiEdit, WebFetch)
+#   Bash(args...)      — e.g. Bash(git status *), Bash(gh pr *)
+#   WebFetch(...)      — e.g. WebFetch(domain:example.com), or bare WebFetch
 #   mcp__*             — MCP tool names
-# Also filters out rules for blocklisted binaries (shells/interpreters).
+# Bare file-tool names (Read, Write, Edit, MultiEdit) are excluded — these
+# tools don't benefit from blanket allow rules.
+# Also filters out rules with blocklisted binaries, shell keywords, and
+# invalid binary names.
 filter_rules() {
 	while IFS= read -r rule; do
 		[[ -z $rule ]] && continue
 		# Extract the binary from Bash(BINARY ...) rules
 		if [[ $rule =~ ^Bash\(([^\ \)]+) ]]; then
 			local bin="${BASH_REMATCH[1]}"
-			if is_blocklisted_binary "$bin"; then
-				continue
-			fi
+			# Reject shells/interpreters
+			if is_blocklisted_binary "$bin"; then continue; fi
+			# Reject shell keywords (for, if, while, etc.)
+			if is_shell_keyword "$bin"; then continue; fi
+			# Reject invalid binary names (variable assignments, metacharacters)
+			if [[ ! $bin =~ ^[a-zA-Z0-9_.~/-]+$ ]]; then continue; fi
 		fi
 		echo "$rule"
 	done
 }
 
 RULES_FROM_LOG=$(jq -r '.rule // empty' "$LOG_FILE" |
-	grep -E '^(Bash\(.*\)|Read|Write|Edit|MultiEdit|WebFetch(\(.*\))?|mcp__.*)$' |
+	grep -E '^(Bash\(.*\)|WebFetch(\(.*\))?|mcp__.*)$' |
 	filter_rules |
 	sort -u)
 
