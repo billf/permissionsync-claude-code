@@ -59,15 +59,20 @@ fi
 filter_rules() {
 	while IFS= read -r rule; do
 		[[ -z $rule ]] && continue
-		# Extract the binary from Bash(BINARY ...) rules
-		if [[ $rule =~ ^Bash\(([^\ \)]+) ]]; then
-			local bin="${BASH_REMATCH[1]}"
-			# Reject shells/interpreters
-			if is_blocklisted_binary "$bin"; then continue; fi
-			# Reject shell keywords (for, if, while, etc.)
-			if is_shell_keyword "$bin"; then continue; fi
-			# Reject invalid binary names (variable assignments, metacharacters)
-			if [[ ! $bin =~ ^[a-zA-Z0-9_.~/-]+$ ]]; then continue; fi
+		if [[ $rule == Bash\(* ]]; then
+			# Extract the binary from Bash(BINARY ...) rules
+			if [[ $rule =~ ^Bash\(([^\ \)]+) ]]; then
+				local bin="${BASH_REMATCH[1]}"
+				# Reject shells/interpreters
+				if is_blocklisted_binary "$bin"; then continue; fi
+				# Reject shell keywords (for, if, while, etc.)
+				if is_shell_keyword "$bin"; then continue; fi
+				# Reject invalid binary names (variable assignments, metacharacters)
+				if [[ ! $bin =~ ^[a-zA-Z0-9_.~/-]+$ ]]; then continue; fi
+			else
+				# Bash(...) but couldn't extract a valid binary — reject
+				continue
+			fi
 		fi
 		echo "$rule"
 	done
