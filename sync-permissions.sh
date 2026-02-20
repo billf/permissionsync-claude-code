@@ -24,24 +24,27 @@ SETTINGS_FILE="$HOME/.claude/settings.json"
 # Parse flags
 REFINE=0
 APPLY=0
+INIT_BASE=0
 MODE=""
 for arg in "$@"; do
 	case "$arg" in
 	--refine) REFINE=1 ;;
 	--apply) APPLY=1 ;;
+	--init-base) INIT_BASE=1 ;;
 	--preview | --print | --diff) MODE="$arg" ;;
 	*)
-		echo "Usage: $0 [--preview|--apply|--print|--diff|--refine] [--apply]"
+		echo "Usage: $0 [--preview|--apply|--print|--diff|--refine|--init-base] [--apply]"
 		exit 1
 		;;
 	esac
 done
 # Default to --preview if nothing specified
-if [[ $REFINE -eq 0 ]] && [[ $APPLY -eq 0 ]] && [[ -z $MODE ]]; then
+if [[ $REFINE -eq 0 ]] && [[ $APPLY -eq 0 ]] && [[ $INIT_BASE -eq 0 ]] && [[ -z $MODE ]]; then
 	MODE="--preview"
 fi
 
-if [[ ! -f $LOG_FILE ]]; then
+# --init-base doesn't need the approval log
+if [[ $INIT_BASE -eq 0 ]] && [[ ! -f $LOG_FILE ]]; then
 	echo "No approval log found at $LOG_FILE"
 	echo "Run Claude Code with the PermissionRequest hook first."
 	exit 1
@@ -78,23 +81,29 @@ filter_rules() {
 	done
 }
 
-RULES_FROM_LOG=$(jq -r '.rule // empty' "$LOG_FILE" |
-	grep -E '^(Bash\(.*\)|WebFetch(\(.*\))?|mcp__.*)$' |
-	filter_rules |
-	sort -u)
-
-# --- Read existing allow rules from settings.json ---
+RULES_FROM_LOG=""
 EXISTING_RULES=""
-if [[ -f $SETTINGS_FILE ]]; then
-	EXISTING_RULES=$(jq -r '.permissions.allow[]? // empty' "$SETTINGS_FILE" 2>/dev/null | sort -u)
+NEW_RULES=""
+ALL_RULES=""
+
+if [[ $INIT_BASE -eq 0 ]]; then
+	RULES_FROM_LOG=$(jq -r '.rule // empty' "$LOG_FILE" |
+		grep -E '^(Bash\(.*\)|WebFetch(\(.*\))?|mcp__.*)$' |
+		filter_rules |
+		sort -u)
+
+	# --- Read existing allow rules from settings.json ---
+	if [[ -f $SETTINGS_FILE ]]; then
+		EXISTING_RULES=$(jq -r '.permissions.allow[]? // empty' "$SETTINGS_FILE" 2>/dev/null | sort -u)
+	fi
+
+	# --- Compute new rules (in log but not in settings) ---
+	# Use comm to find rules in log but not in settings (both already sorted)
+	NEW_RULES=$(comm -23 <(echo "$RULES_FROM_LOG" | sed '/^$/d') <(echo "$EXISTING_RULES" | sed '/^$/d'))
+
+	# --- Combine all rules ---
+	ALL_RULES=$(printf '%s\n%s' "$EXISTING_RULES" "$RULES_FROM_LOG" | sed '/^$/d' | sort -u)
 fi
-
-# --- Compute new rules (in log but not in settings) ---
-# Use comm to find rules in log but not in settings (both already sorted)
-NEW_RULES=$(comm -23 <(echo "$RULES_FROM_LOG" | sed '/^$/d') <(echo "$EXISTING_RULES" | sed '/^$/d'))
-
-# --- Combine all rules ---
-ALL_RULES=$(printf '%s\n%s' "$EXISTING_RULES" "$RULES_FROM_LOG" | sed '/^$/d' | sort -u)
 
 # expand_safe_direct_rules
 #
@@ -121,14 +130,21 @@ expand_safe_direct_rules() {
 		safe_list=$(get_safe_subcommands "$bin")
 		local alt_prefixes
 		alt_prefixes=$(get_alt_rule_prefixes "$bin")
-		local subcmd
-		for subcmd in $safe_list; do
-			echo "Bash(${bin} ${subcmd} *)"
-			# Emit alternative forms (e.g. git -C * log *)
-			local prefix
-			for prefix in $alt_prefixes; do
-				echo "Bash(${bin} ${prefix} * ${subcmd} *)"
-			done
+		local word
+		for word in $safe_list; do
+			if [[ $word == *:* ]]; then
+				# Compound key: pr:list → Bash(gh pr list *)
+				local parent="${word%%:*}"
+				local sub="${word#*:}"
+				echo "Bash(${bin} ${parent} ${sub} *)"
+			else
+				echo "Bash(${bin} ${word} *)"
+				# Emit alternative forms (e.g. git -C * log *)
+				local prefix
+				for prefix in $alt_prefixes; do
+					echo "Bash(${bin} ${prefix} * ${word} *)"
+				done
+			fi
 		done
 	done
 }
@@ -214,8 +230,117 @@ write_settings() {
 	fi
 }
 
+# --- Helper: locate base-settings.json ---
+find_base_settings() {
+	local candidates=(
+		"${PERMISSIONSYNC_SHARE_DIR:-}/base-settings.json"
+		"${SCRIPT_DIR}/../share/permissionsync-cc/base-settings.json"
+		"${SCRIPT_DIR}/base-settings.json"
+	)
+	local c
+	for c in "${candidates[@]}"; do
+		if [[ -f $c ]]; then
+			echo "$c"
+			return 0
+		fi
+	done
+	echo "ERROR: base-settings.json not found. Is permissionsync-cc installed via Nix?" >&2
+	return 1
+}
+
 # --- Dispatch ---
-if [[ $REFINE -eq 1 ]]; then
+if [[ $INIT_BASE -eq 1 ]]; then
+	BASE_SETTINGS=$(find_base_settings) || exit 1
+
+	# Read allow and deny arrays from base settings
+	BASE_ALLOW=$(jq -r '.permissions.allow[]? // empty' "$BASE_SETTINGS" | sort -u)
+	BASE_DENY=$(jq -r '.permissions.deny[]? // empty' "$BASE_SETTINGS" | sort -u)
+
+	# Read existing settings
+	EXISTING_ALLOW=""
+	EXISTING_DENY=""
+	if [[ -f $SETTINGS_FILE ]]; then
+		EXISTING_ALLOW=$(jq -r '.permissions.allow[]? // empty' "$SETTINGS_FILE" 2>/dev/null | sort -u)
+		EXISTING_DENY=$(jq -r '.permissions.deny[]? // empty' "$SETTINGS_FILE" 2>/dev/null | sort -u)
+	fi
+
+	# Compute new entries
+	NEW_ALLOW=$(comm -23 <(echo "$BASE_ALLOW" | sed '/^$/d') <(echo "$EXISTING_ALLOW" | sed '/^$/d'))
+	NEW_DENY=$(comm -23 <(echo "$BASE_DENY" | sed '/^$/d') <(echo "$EXISTING_DENY" | sed '/^$/d'))
+
+	# Merge
+	MERGED_ALLOW=$(printf '%s\n%s' "$EXISTING_ALLOW" "$BASE_ALLOW" | sed '/^$/d' | sort -u)
+	MERGED_DENY=$(printf '%s\n%s' "$EXISTING_DENY" "$BASE_DENY" | sed '/^$/d' | sort -u)
+
+	if [[ $APPLY -eq 1 ]]; then
+		if [[ -z $NEW_ALLOW ]] && [[ -z $NEW_DENY ]]; then
+			echo "Already in sync with base settings. Nothing to do."
+			exit 0
+		fi
+
+		ALLOW_JSON=$(echo "$MERGED_ALLOW" | jq -R -s 'split("\n") | map(select(length > 0)) | sort')
+		DENY_JSON=$(echo "$MERGED_DENY" | jq -R -s 'split("\n") | map(select(length > 0)) | sort')
+
+		if [[ ! -f $SETTINGS_FILE ]]; then
+			echo '{}' >"$SETTINGS_FILE"
+		fi
+
+		INIT_TEMP=$(mktemp)
+		trap 'rm -f "$INIT_TEMP"' RETURN
+
+		jq --argjson allow "$ALLOW_JSON" --argjson deny "$DENY_JSON" '
+		  .permissions //= {} |
+		  .permissions.allow = $allow |
+		  .permissions.deny = $deny
+		' "$SETTINGS_FILE" >"$INIT_TEMP"
+
+		if jq empty "$INIT_TEMP" 2>/dev/null; then
+			cp "$SETTINGS_FILE" "${SETTINGS_FILE}.bak"
+			mv "$INIT_TEMP" "$SETTINGS_FILE"
+			trap - RETURN
+			echo "Updated $SETTINGS_FILE (base settings merged)"
+			echo "Backup at ${SETTINGS_FILE}.bak"
+		else
+			echo "ERROR: Generated invalid JSON. Aborting."
+			exit 1
+		fi
+
+		if [[ -n $NEW_ALLOW ]]; then
+			echo ""
+			echo "Added allow rules:"
+			# shellcheck disable=SC2001
+			echo "$NEW_ALLOW" | sed 's/^/  + /'
+		fi
+		if [[ -n $NEW_DENY ]]; then
+			echo ""
+			echo "Added deny rules:"
+			# shellcheck disable=SC2001
+			echo "$NEW_DENY" | sed 's/^/  + /'
+		fi
+	else
+		# Preview mode (default)
+		echo "=== Base settings from $BASE_SETTINGS ==="
+		echo ""
+		echo "Allow rules that would be added:"
+		if [[ -n $NEW_ALLOW ]]; then
+			# shellcheck disable=SC2001
+			echo "$NEW_ALLOW" | sed 's/^/  + /'
+		else
+			echo "  (none — already in sync)"
+		fi
+		echo ""
+		echo "Deny rules that would be added:"
+		if [[ -n $NEW_DENY ]]; then
+			# shellcheck disable=SC2001
+			echo "$NEW_DENY" | sed 's/^/  + /'
+		else
+			echo "  (none — already in sync)"
+		fi
+		echo ""
+		echo "Run with --init-base --apply to write to $SETTINGS_FILE"
+	fi
+
+elif [[ $REFINE -eq 1 ]]; then
 	compute_refined_rules
 
 	if [[ -z $BROAD_RULES ]]; then
