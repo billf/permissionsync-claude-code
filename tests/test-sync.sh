@@ -111,7 +111,9 @@ assert_filtered "shell keyword: case" 'Bash(case *)'
 # filter_rules: invalid binary names should be rejected
 # ============================================================
 
+# shellcheck disable=SC2016
 assert_filtered "variable assignment in binary" 'Bash(TMP_DIR="$(mktemp *)'
+# shellcheck disable=SC2016
 assert_filtered "dollar sign in binary" 'Bash($(echo *)'
 assert_filtered "equals sign in binary" 'Bash(FOO=bar *)'
 assert_filtered "parenthesis in binary" 'Bash(){ *)'
