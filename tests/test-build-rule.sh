@@ -67,19 +67,22 @@ assert_rule "Bash" '{"command":"cargo check --workspace"}' \
 assert_rule "Bash" '{"command":"cargo publish"}' \
 	"Bash(cargo publish *)" "cargo publish" "false" ""
 
-# --- Bash: gh subcommand tracking ---
+# --- Bash: gh subcommand tracking (compound keys) ---
+# Two-level: gh pr view → Bash(gh pr view *)
 assert_rule "Bash" '{"command":"gh pr view #123"}' \
-	"Bash(gh pr *)" "gh pr" "false" ""
+	"Bash(gh pr view *)" "gh pr view" "true" ""
 
 assert_rule "Bash" '{"command":"gh status"}' \
 	"Bash(gh status *)" "gh status" "true" ""
 
+# Two-level: gh issue list → Bash(gh issue list *)
 assert_rule "Bash" '{"command":"gh issue list"}' \
-	"Bash(gh issue *)" "gh issue" "false" ""
+	"Bash(gh issue list *)" "gh issue list" "true" ""
 
 assert_rule "Bash" '{"command":"gh search repos --query test"}' \
 	"Bash(gh search *)" "gh search" "true" ""
 
+# gh api has no compound keys — stays single-level
 assert_rule "Bash" '{"command":"gh api repos/foo/bar"}' \
 	"Bash(gh api *)" "gh api" "false" ""
 

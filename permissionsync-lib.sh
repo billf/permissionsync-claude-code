@@ -178,15 +178,29 @@ peel_indirection() {
 	PEELED_COMMAND="$cmd"
 }
 
-# is_safe_subcommand BINARY SUBCMD
+# is_safe_subcommand BINARY SUBCMD [SUB_SUBCMD]
 #
-# Returns 0 (true) if SUBCMD is in the safe list for BINARY, 1 otherwise.
+# Returns 0 (true) if SUBCMD (or SUBCMD+SUB_SUBCMD compound key) is in the
+# safe list for BINARY. 3-arg form checks compound key "subcmd:sub_subcmd".
 is_safe_subcommand() {
 	local binary="$1" subcmd="$2"
 	local safe_list
 	safe_list=$(get_safe_subcommands "$binary")
 	[[ -z $safe_list ]] && return 1
 
+	# 3-arg form: check compound key first
+	if [[ $# -ge 3 ]]; then
+		local sub_subcmd="$3"
+		local word
+		for word in $safe_list; do
+			if [[ $word == "${subcmd}:${sub_subcmd}" ]]; then
+				return 0
+			fi
+		done
+		return 1
+	fi
+
+	# 2-arg form: check standalone subcommand (skip compound keys)
 	local word
 	for word in $safe_list; do
 		if [[ $word == "$subcmd" ]]; then
@@ -203,6 +217,20 @@ has_subcommands() {
 	local safe_list
 	safe_list=$(get_safe_subcommands "$1")
 	[[ -n $safe_list ]]
+}
+
+# has_compound_keys BINARY
+#
+# Returns 0 (true) if this binary has any compound-key entries (e.g. pr:list).
+has_compound_keys() {
+	local safe_list word
+	safe_list=$(get_safe_subcommands "$1")
+	for word in $safe_list; do
+		if [[ $word == *:* ]]; then
+			return 0
+		fi
+	done
+	return 1
 }
 
 # is_in_worktree
@@ -458,12 +486,49 @@ build_rule_v2() {
 
 			# Build the rule based on whether this binary has tracked subcommands
 			if has_subcommands "$binary" && [[ -n $subcommand ]]; then
-				RULE="Bash(${binary} ${subcommand} *)"
-				BASE_COMMAND="${binary} ${subcommand}"
-				# Only mark safe if no metacharacters and not multiline
-				if [[ $has_metachar -eq 0 ]] && [[ $is_multiline -eq 0 ]] &&
-					is_safe_subcommand "$binary" "$subcommand"; then
-					IS_SAFE="true"
+				# Check if this subcommand has compound-key entries (e.g. pr:list).
+			# Only try compound path if this specific subcommand has compound keys.
+			local try_compound=false
+			if ! is_safe_subcommand "$binary" "$subcommand"; then
+				local _w
+				for _w in $(get_safe_subcommands "$binary"); do
+					if [[ $_w == "${subcommand}:"* ]]; then
+						try_compound=true
+						break
+					fi
+				done
+			fi
+
+				if $try_compound; then
+					# Two-level commands (e.g. gh pr list): extract sub-subcommand
+					local sub_subcmd=""
+					local rest_after_subcmd="${rest#"$subcommand"}"
+					rest_after_subcmd="${rest_after_subcmd#"${rest_after_subcmd%%[![:space:]]*}"}"
+					if [[ -n $rest_after_subcmd ]]; then
+						sub_subcmd="${rest_after_subcmd%% *}"
+					fi
+
+					if [[ -n $sub_subcmd ]] && [[ $sub_subcmd != -* ]]; then
+						# Have a sub-subcommand: build two-level rule
+						RULE="Bash(${binary} ${subcommand} ${sub_subcmd} *)"
+						BASE_COMMAND="${binary} ${subcommand} ${sub_subcmd}"
+						if [[ $has_metachar -eq 0 ]] && [[ $is_multiline -eq 0 ]] &&
+							is_safe_subcommand "$binary" "$subcommand" "$sub_subcmd"; then
+							IS_SAFE="true"
+						fi
+					else
+						# No sub-subcommand or flag-only: single-level rule, not safe
+						RULE="Bash(${binary} ${subcommand} *)"
+						BASE_COMMAND="${binary} ${subcommand}"
+					fi
+				else
+					# Single-level subcommand tracking (e.g. git status, gh search)
+					RULE="Bash(${binary} ${subcommand} *)"
+					BASE_COMMAND="${binary} ${subcommand}"
+					if [[ $has_metachar -eq 0 ]] && [[ $is_multiline -eq 0 ]] &&
+						is_safe_subcommand "$binary" "$subcommand"; then
+						IS_SAFE="true"
+					fi
 				fi
 			elif [[ -n $binary ]]; then
 				RULE="Bash(${binary} *)"
