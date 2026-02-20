@@ -284,6 +284,198 @@ else
 	FAIL=$((FAIL + 1))
 fi
 
+# ============================================================
+# expand_safe_direct_rules: compound-key expansion
+# ============================================================
+
+# Source the full expand_safe_direct_rules function
+expand_safe_direct_rules() {
+	local seen_binaries
+	seen_binaries=$(
+		{
+			jq -r 'select(.base_command != null and .base_command != "") | .base_command | split(" ")[0]' \
+				"$LOG_FILE" 2>/dev/null
+			echo "$RULES_FROM_LOG" | sed -n 's/^Bash(\([a-zA-Z0-9_-]*\) \*)/\1/p'
+		} | sort -u
+	)
+
+	local bin
+	for bin in $seen_binaries; do
+		has_subcommands "$bin" || continue
+		local safe_list
+		safe_list=$(get_safe_subcommands "$bin")
+		local alt_prefixes
+		alt_prefixes=$(get_alt_rule_prefixes "$bin")
+		local word
+		for word in $safe_list; do
+			if [[ $word == *:* ]]; then
+				local parent="${word%%:*}"
+				local sub="${word#*:}"
+				echo "Bash(${bin} ${parent} ${sub} *)"
+			else
+				echo "Bash(${bin} ${word} *)"
+				local prefix
+				for prefix in $alt_prefixes; do
+					echo "Bash(${bin} ${prefix} * ${word} *)"
+				done
+			fi
+		done
+	done
+}
+
+# Create log with gh entries to test expansion
+GH_LOG="${TMP_DIR}/gh-test.jsonl"
+cat >"$GH_LOG" <<'JSONL'
+{"rule":"Bash(gh pr *)","base_command":"gh pr","tool":"Bash","timestamp":"2024-01-01T00:00:00Z"}
+JSONL
+
+LOG_FILE="$GH_LOG"
+RULES_FROM_LOG="Bash(gh pr *)"
+
+EXPANSION=$(expand_safe_direct_rules | sort -u)
+
+TEST_NUM=$((TEST_NUM + 1))
+if echo "$EXPANSION" | grep -qF 'Bash(gh pr list *)'; then
+	echo "ok ${TEST_NUM} - expansion: compound key pr:list → Bash(gh pr list *)"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - expansion: should include Bash(gh pr list *)"
+	echo "#   output: '${EXPANSION}'"
+	FAIL=$((FAIL + 1))
+fi
+
+TEST_NUM=$((TEST_NUM + 1))
+if echo "$EXPANSION" | grep -qF 'Bash(gh pr view *)'; then
+	echo "ok ${TEST_NUM} - expansion: compound key pr:view → Bash(gh pr view *)"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - expansion: should include Bash(gh pr view *)"
+	echo "#   output: '${EXPANSION}'"
+	FAIL=$((FAIL + 1))
+fi
+
+TEST_NUM=$((TEST_NUM + 1))
+if echo "$EXPANSION" | grep -qF 'Bash(gh status *)'; then
+	echo "ok ${TEST_NUM} - expansion: standalone gh status emitted"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - expansion: should include Bash(gh status *)"
+	echo "#   output: '${EXPANSION}'"
+	FAIL=$((FAIL + 1))
+fi
+
+TEST_NUM=$((TEST_NUM + 1))
+if echo "$EXPANSION" | grep -qF 'Bash(gh browse *)'; then
+	echo "ok ${TEST_NUM} - expansion: standalone gh browse emitted"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - expansion: should include Bash(gh browse *)"
+	echo "#   output: '${EXPANSION}'"
+	FAIL=$((FAIL + 1))
+fi
+
+# ============================================================
+# --init-base: preview and apply modes
+# ============================================================
+
+# Create a fake base-settings.json
+BASE_DIR="${TMP_DIR}/share/permissionsync-cc"
+mkdir -p "$BASE_DIR"
+cat >"${BASE_DIR}/base-settings.json" <<'JSON'
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr view *)"
+    ],
+    "deny": [
+      "Read(~/.gitconfig)"
+    ]
+  }
+}
+JSON
+
+# Create a fake settings.json with one existing rule
+FAKE_SETTINGS="${TMP_DIR}/settings.json"
+cat >"$FAKE_SETTINGS" <<'JSON'
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status *)"
+    ]
+  }
+}
+JSON
+
+# Test --init-base preview
+# shellcheck disable=SC2034
+SETTINGS_FILE="$FAKE_SETTINGS"
+PERMISSIONSYNC_SHARE_DIR="$BASE_DIR"
+export PERMISSIONSYNC_SHARE_DIR
+
+# Source the find_base_settings function
+find_base_settings() {
+	local candidates=(
+		"${PERMISSIONSYNC_SHARE_DIR:-}/base-settings.json"
+		"${SCRIPT_DIR}/../share/permissionsync-cc/base-settings.json"
+		"${SCRIPT_DIR}/base-settings.json"
+	)
+	local c
+	for c in "${candidates[@]}"; do
+		if [[ -f $c ]]; then
+			echo "$c"
+			return 0
+		fi
+	done
+	return 1
+}
+
+BASE_SETTINGS=$(find_base_settings)
+TEST_NUM=$((TEST_NUM + 1))
+if [[ -n $BASE_SETTINGS ]] && [[ -f $BASE_SETTINGS ]]; then
+	echo "ok ${TEST_NUM} - init-base: found base-settings.json"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - init-base: should find base-settings.json"
+	FAIL=$((FAIL + 1))
+fi
+
+# Compute what would be merged
+BASE_ALLOW=$(jq -r '.permissions.allow[]? // empty' "$BASE_SETTINGS" | sort -u)
+EXISTING_ALLOW=$(jq -r '.permissions.allow[]? // empty' "$FAKE_SETTINGS" | sort -u)
+NEW_BASE_ALLOW=$(comm -23 <(echo "$BASE_ALLOW" | sed '/^$/d') <(echo "$EXISTING_ALLOW" | sed '/^$/d'))
+
+TEST_NUM=$((TEST_NUM + 1))
+if echo "$NEW_BASE_ALLOW" | grep -qF 'Bash(gh pr list *)'; then
+	echo "ok ${TEST_NUM} - init-base: gh pr list would be added"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - init-base: gh pr list should be new"
+	echo "#   new_allow: '${NEW_BASE_ALLOW}'"
+	FAIL=$((FAIL + 1))
+fi
+
+TEST_NUM=$((TEST_NUM + 1))
+if ! echo "$NEW_BASE_ALLOW" | grep -qF 'Bash(git status *)'; then
+	echo "ok ${TEST_NUM} - init-base: git status already exists, not new"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - init-base: git status should not be new (already exists)"
+	FAIL=$((FAIL + 1))
+fi
+
+# Test deny rules
+BASE_DENY=$(jq -r '.permissions.deny[]? // empty' "$BASE_SETTINGS" | sort -u)
+TEST_NUM=$((TEST_NUM + 1))
+if echo "$BASE_DENY" | grep -qF 'Read(~/.gitconfig)'; then
+	echo "ok ${TEST_NUM} - init-base: deny rules present"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - init-base: should have deny rules"
+	FAIL=$((FAIL + 1))
+fi
+
 echo ""
 echo "1..${TEST_NUM}"
 echo "# pass: ${PASS}"

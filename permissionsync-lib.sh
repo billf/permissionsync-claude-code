@@ -487,17 +487,17 @@ build_rule_v2() {
 			# Build the rule based on whether this binary has tracked subcommands
 			if has_subcommands "$binary" && [[ -n $subcommand ]]; then
 				# Check if this subcommand has compound-key entries (e.g. pr:list).
-			# Only try compound path if this specific subcommand has compound keys.
-			local try_compound=false
-			if ! is_safe_subcommand "$binary" "$subcommand"; then
-				local _w
-				for _w in $(get_safe_subcommands "$binary"); do
-					if [[ $_w == "${subcommand}:"* ]]; then
-						try_compound=true
-						break
-					fi
-				done
-			fi
+				# Only try compound path if this specific subcommand has compound keys.
+				local try_compound=false
+				if ! is_safe_subcommand "$binary" "$subcommand"; then
+					local _w
+					for _w in $(get_safe_subcommands "$binary"); do
+						if [[ $_w == "${subcommand}:"* ]]; then
+							try_compound=true
+							break
+						fi
+					done
+				fi
 
 				if $try_compound; then
 					# Two-level commands (e.g. gh pr list): extract sub-subcommand

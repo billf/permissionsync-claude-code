@@ -125,6 +125,12 @@
             doCheck = true;
             checkPhase = ''
               patchShebangs tests/
+
+              # Generate base-settings.json for test-baseline.sh
+              ${pkgs.bash}/bin/bash generate-base-settings.sh \
+                "${inputs.claude-baseline}" \
+                base-settings.json
+
               for t in tests/test-*.sh; do
                 echo "=== Running $t ==="
                 bash "$t"

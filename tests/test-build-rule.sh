@@ -86,6 +86,39 @@ assert_rule "Bash" '{"command":"gh search repos --query test"}' \
 assert_rule "Bash" '{"command":"gh api repos/foo/bar"}' \
 	"Bash(gh api *)" "gh api" "false" ""
 
+# --- Bash: gh compound-key two-level rules ---
+# Safe compound: gh pr list → two-level rule, IS_SAFE=true
+assert_rule "Bash" '{"command":"gh pr list --repo foo/bar"}' \
+	"Bash(gh pr list *)" "gh pr list" "true" ""
+
+# Unsafe compound: gh pr create → two-level rule, IS_SAFE=false
+assert_rule "Bash" '{"command":"gh pr create --title test"}' \
+	"Bash(gh pr create *)" "gh pr create" "false" ""
+
+# Safe standalone: gh browse → single-level
+assert_rule "Bash" '{"command":"gh browse"}' \
+	"Bash(gh browse *)" "gh browse" "true" ""
+
+# gh subcommand with no sub-subcommand (e.g. bare "gh pr")
+assert_rule "Bash" '{"command":"gh pr"}' \
+	"Bash(gh pr *)" "gh pr" "false" ""
+
+# gh issue view with flags
+assert_rule "Bash" '{"command":"gh issue view 42 --json title"}' \
+	"Bash(gh issue view *)" "gh issue view" "true" ""
+
+# gh run view (compound safe)
+assert_rule "Bash" '{"command":"gh run view 12345"}' \
+	"Bash(gh run view *)" "gh run view" "true" ""
+
+# gh auth status (compound safe)
+assert_rule "Bash" '{"command":"gh auth status --hostname github.com"}' \
+	"Bash(gh auth status *)" "gh auth status" "true" ""
+
+# gh repo clone (compound unsafe — not in safe list)
+assert_rule "Bash" '{"command":"gh repo clone foo/bar"}' \
+	"Bash(gh repo clone *)" "gh repo clone" "false" ""
+
 # --- Bash: indirection ---
 assert_rule "Bash" '{"command":"sudo git push origin main"}' \
 	"Bash(git push *)" "git push" "false" "sudo"

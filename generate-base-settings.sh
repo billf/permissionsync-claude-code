@@ -58,9 +58,8 @@ filter_and_normalize() {
 	while IFS= read -r rule; do
 		[[ -z $rule ]] && continue
 
-		# Normalize deprecated colon format
-		rule="${rule//:'\*)'/ *\)}"
-		# Fallback sed for any remaining colon-star patterns
+		# Normalize deprecated colon format: Bash(cmd:*) → Bash(cmd *)
+		# shellcheck disable=SC2001
 		rule=$(echo "$rule" | sed 's/:\*)/\ \*)/g')
 
 		# Validate Bash rules

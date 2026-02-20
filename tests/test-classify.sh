@@ -126,12 +126,63 @@ assert_safe "gh" "search"
 assert_safe "gh" "help"
 assert_safe "gh" "version"
 
-# gh unsafe subcommands (contain write operations)
+# gh standalone safe (added)
+assert_safe "gh" "browse"
+
+# gh unsafe standalone subcommands (contain write operations)
 assert_not_safe "gh" "pr"
 assert_not_safe "gh" "issue"
 assert_not_safe "gh" "repo"
 assert_not_safe "gh" "release"
 assert_not_safe "gh" "api"
+
+# gh compound-key safe (3-arg form)
+assert_safe_compound() {
+	local binary="$1" subcmd="$2" sub_subcmd="$3"
+	TEST_NUM=$((TEST_NUM + 1))
+
+	if is_safe_subcommand "$binary" "$subcmd" "$sub_subcmd"; then
+		echo "ok ${TEST_NUM} - ${binary} ${subcmd} ${sub_subcmd} is safe (compound)"
+		PASS=$((PASS + 1))
+	else
+		echo "not ok ${TEST_NUM} - ${binary} ${subcmd} ${sub_subcmd} should be safe (compound)"
+		FAIL=$((FAIL + 1))
+	fi
+}
+
+assert_not_safe_compound() {
+	local binary="$1" subcmd="$2" sub_subcmd="$3"
+	TEST_NUM=$((TEST_NUM + 1))
+
+	if ! is_safe_subcommand "$binary" "$subcmd" "$sub_subcmd"; then
+		echo "ok ${TEST_NUM} - ${binary} ${subcmd} ${sub_subcmd} is not safe (compound)"
+		PASS=$((PASS + 1))
+	else
+		echo "not ok ${TEST_NUM} - ${binary} ${subcmd} ${sub_subcmd} should NOT be safe (compound)"
+		FAIL=$((FAIL + 1))
+	fi
+}
+
+assert_safe_compound "gh" "pr" "list"
+assert_safe_compound "gh" "pr" "view"
+assert_safe_compound "gh" "pr" "diff"
+assert_safe_compound "gh" "pr" "checks"
+assert_safe_compound "gh" "pr" "status"
+assert_safe_compound "gh" "issue" "list"
+assert_safe_compound "gh" "issue" "view"
+assert_safe_compound "gh" "issue" "status"
+assert_safe_compound "gh" "repo" "view"
+assert_safe_compound "gh" "repo" "list"
+assert_safe_compound "gh" "run" "list"
+assert_safe_compound "gh" "run" "view"
+assert_safe_compound "gh" "auth" "status"
+
+# gh compound-key unsafe (write operations)
+assert_not_safe_compound "gh" "pr" "create"
+assert_not_safe_compound "gh" "pr" "merge"
+assert_not_safe_compound "gh" "issue" "create"
+assert_not_safe_compound "gh" "repo" "clone"
+assert_not_safe_compound "gh" "run" "cancel"
 
 # Unknown binary
 assert_not_safe "unknown_tool" "whatever"
