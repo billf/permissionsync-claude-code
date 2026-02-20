@@ -29,7 +29,12 @@
         "permissionsync-config.sh"
       ];
 
-      allScripts = executableScripts ++ libraryScripts ++ [ "install.sh" ];
+      # Build-time only scripts (not installed to bin/)
+      buildScripts = [
+        "generate-base-settings.sh"
+      ];
+
+      allScripts = executableScripts ++ libraryScripts ++ buildScripts ++ [ "install.sh" ];
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [
@@ -63,7 +68,7 @@
 
             src = inputs.self;
 
-            nativeBuildInputs = [ pkgs.makeWrapper ];
+            nativeBuildInputs = [ pkgs.makeWrapper pkgs.jq ];
 
             dontBuild = true;
 
@@ -92,6 +97,11 @@
                 wrapProgram "$out/bin/$s" \
                   --prefix PATH : "${pkgs.lib.makeBinPath runtimeDeps}"
               done
+
+              # Generate base settings from claude-baseline readonly tiers
+              ${pkgs.bash}/bin/bash $src/generate-base-settings.sh \
+                "${inputs.claude-baseline}" \
+                "$out/share/permissionsync-cc/base-settings.json"
 
               # Patch setup-hooks.sh to find raw scripts in share/
               sed -i 's|PERMISSIONSYNC_SHARE_DIR=.*|PERMISSIONSYNC_SHARE_DIR="'"$out"'/share/permissionsync-cc"|' \
