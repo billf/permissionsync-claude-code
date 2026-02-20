@@ -47,11 +47,18 @@ get_safe_subcommands() {
 		echo "list info search outdated deps leaves config"
 		;;
 	gh)
-		# Truly read-only first-level subcommands only. Excluded:
-		#   pr, issue, repo, release, gist, label, cache, run, workflow
-		#   — each contains both read and write sub-subcommands
-		#   api — can make POST/DELETE requests
-		echo "status search help version"
+		# Standalone safe subcommands + compound-key sub-subcommands.
+		# Compound keys use : delimiter (pr:list → "gh pr list").
+		# Excluded: gh repo clone (write op), gh api (POST/DELETE)
+		echo "status search help version browse" \
+			"pr:list pr:view pr:diff pr:checks pr:status" \
+			"issue:list issue:view issue:status" \
+			"repo:view repo:list" \
+			"run:list run:view" \
+			"workflow:list workflow:view" \
+			"release:list release:view" \
+			"gist:list gist:view" \
+			"auth:status"
 		;;
 	*)
 		echo ""
