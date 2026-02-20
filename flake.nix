@@ -6,6 +6,10 @@
     flake-parts.url = "github:hercules-ci/flake-parts";
     git-hooks.url = "github:cachix/git-hooks.nix";
     git-hooks.inputs.nixpkgs.follows = "nixpkgs";
+    claude-baseline = {
+      url = "github:bethmaloney/claude-baseline";
+      flake = false;
+    };
   };
 
   outputs = inputs@{ flake-parts, ... }:

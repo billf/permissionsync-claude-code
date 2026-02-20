@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "claude-baseline": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1769077537,
+        "narHash": "sha256-Qd+3tsY8MqdiRg7tr0gVpa4yCp73lS7lsHwkX7Sy/xQ=",
+        "owner": "bethmaloney",
+        "repo": "claude-baseline",
+        "rev": "c610886043614c5932fb1fb56b54a011d4dee5a6",
+        "type": "github"
+      },
+      "original": {
+        "owner": "bethmaloney",
+        "repo": "claude-baseline",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -110,6 +126,7 @@
     },
     "root": {
       "inputs": {
+        "claude-baseline": "claude-baseline",
         "flake-parts": "flake-parts",
         "git-hooks": "git-hooks",
         "nixpkgs": "nixpkgs"
