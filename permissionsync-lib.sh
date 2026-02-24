@@ -359,6 +359,100 @@ read_sibling_rules() {
 	return 0
 }
 
+# filter_rules
+#
+# Reads rules from stdin, filters out invalid/dangerous ones.
+# Rejects: bare file-tool names, blocklisted binaries, shell keywords,
+# invalid binary names.
+# Writes valid rules to stdout.
+filter_rules() {
+	while IFS= read -r rule; do
+		[[ -z $rule ]] && continue
+		if [[ $rule == Bash\(* ]]; then
+			# Extract the binary from Bash(BINARY ...) rules
+			if [[ $rule =~ ^Bash\(([^\ \)]+) ]]; then
+				local bin="${BASH_REMATCH[1]}"
+				# Reject shells/interpreters
+				if is_blocklisted_binary "$bin"; then continue; fi
+				# Reject shell keywords (for, if, while, etc.)
+				if is_shell_keyword "$bin"; then continue; fi
+				# Reject invalid binary names (variable assignments, metacharacters)
+				if [[ ! $bin =~ ^[a-zA-Z0-9_.~/-]+$ ]]; then continue; fi
+			else
+				# Bash(...) but couldn't extract a valid binary — reject
+				continue
+			fi
+		fi
+		echo "$rule"
+	done
+}
+
+# refine_rules_from RULES_STRING
+#
+# Takes newline-separated rules as $1. Finds broad "Bash(binary *)" rules
+# where the binary has tracked subcommands, and expands them to safe
+# subcommand rules.
+#
+# Sets globals:
+#   REFINED_RULES — the final rule set (broad replaced with fine-grained)
+#   BROAD_RULES   — the broad rules that were replaced
+#   SAFE_RULES    — the safe subcommand rules generated
+refine_rules_from() {
+	local all_rules="$1"
+
+	# Find broad rules that could be refined
+	BROAD_RULES=""
+	local _bin
+	while IFS= read -r rule; do
+		[[ -z $rule ]] && continue
+		if [[ $rule =~ ^Bash\(([a-zA-Z0-9_-]+)\ \*\)$ ]]; then
+			_bin="${BASH_REMATCH[1]}"
+			if has_subcommands "$_bin"; then
+				BROAD_RULES="${BROAD_RULES}${rule}"$'\n'
+			fi
+		fi
+	done <<<"$all_rules"
+	BROAD_RULES=$(echo "$BROAD_RULES" | sed '/^$/d')
+
+	# Generate safe subcommand rules from all binaries present
+	SAFE_RULES=""
+	while IFS= read -r rule; do
+		[[ -z $rule ]] && continue
+		if [[ $rule =~ ^Bash\(([a-zA-Z0-9_-]+) ]]; then
+			_bin="${BASH_REMATCH[1]}"
+			if has_subcommands "$_bin"; then
+				local safe_list alt_prefixes
+				safe_list=$(get_safe_subcommands "$_bin")
+				alt_prefixes=$(get_alt_rule_prefixes "$_bin")
+				local subcmd
+				for subcmd in $safe_list; do
+					if [[ $subcmd == *:* ]]; then
+						# Compound key: pr:list → Bash(gh pr list *)
+						local parent="${subcmd%%:*}"
+						local sub="${subcmd#*:}"
+						SAFE_RULES="${SAFE_RULES}Bash(${_bin} ${parent} ${sub} *)"$'\n'
+					else
+						SAFE_RULES="${SAFE_RULES}Bash(${_bin} ${subcmd} *)"$'\n'
+						local prefix
+						for prefix in $alt_prefixes; do
+							SAFE_RULES="${SAFE_RULES}Bash(${_bin} ${prefix} * ${subcmd} *)"$'\n'
+						done
+					fi
+				done
+			fi
+		fi
+	done <<<"$all_rules"
+	SAFE_RULES=$(echo "$SAFE_RULES" | sed '/^$/d' | sort -u)
+
+	# Build refined rule set: remove broad, add fine-grained
+	REFINED_RULES="$all_rules"
+	while IFS= read -r broad; do
+		[[ -z $broad ]] && continue
+		REFINED_RULES=$(echo "$REFINED_RULES" | grep -vxF "$broad" || true)
+	done <<<"$BROAD_RULES"
+	REFINED_RULES=$(printf '%s\n%s' "$REFINED_RULES" "$SAFE_RULES" | sed '/^$/d' | sort -u)
+}
+
 # build_rule_v2 TOOL_NAME TOOL_INPUT_JSON
 #
 # Builds a permission rule string from a tool invocation.
