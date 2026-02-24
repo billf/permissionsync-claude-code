@@ -75,6 +75,7 @@ git clone https://github.com/billf/permissionsync-claude-code.git && cd permissi
 | `~/.claude/hooks/log-permission-auto.sh` | Same, but auto-approves known rules |
 | `~/.claude/hooks/sync-permissions.sh` | Merges JSONL log into `~/.claude/settings.json` |
 | `~/.claude/hooks/worktree-sync.sh` | Aggregates and syncs permission rules across git worktrees |
+| `~/.claude/hooks/merged-settings.sh` | Outputs merged permissions JSON for `claude --settings` |
 | `~/.claude/hooks/permissionsync-config.sh` | Data definitions: safe subcommands, indirection types, blocklists |
 | `~/.claude/hooks/permissionsync-lib.sh` | Core library: rule building, indirection peeling, worktree discovery |
 
@@ -171,6 +172,34 @@ If you use git worktrees, `worktree-sync.sh` aggregates permission rules from al
 ~/.claude/hooks/worktree-sync.sh --refine --apply-all
 ```
 
+### Worktree Launch Integration (`claude --worktree`)
+
+Claude Code's `claude --worktree` (`-w`) starts sessions in isolated git worktrees at `<repo>/.claude/worktrees/<name>`. Combined with `--settings`, you can launch a worktree pre-loaded with permissions from all sibling worktrees and global settings — no re-approval needed.
+
+**How it works:** `--settings <path>` layers additional settings on top of the normal hierarchy. Using bash process substitution, `merged-settings.sh` generates the JSON on the fly:
+
+```bash
+# Launch a worktree with merged permissions from all sources
+claude -w feature-x --settings <(~/.claude/hooks/merged-settings.sh)
+
+# Same, but refine broad rules (e.g. Bash(git *)) into safe subcommands
+claude -w feature-x --settings <(~/.claude/hooks/merged-settings.sh --refine)
+
+# Also include rules from the JSONL approval log
+claude -w feature-x --settings <(~/.claude/hooks/merged-settings.sh --refine --from-log)
+
+# Global settings only (no worktree rule discovery)
+claude -w feature-x --settings <(~/.claude/hooks/merged-settings.sh --global-only)
+```
+
+**Shell alias for convenience:**
+```bash
+# .bashrc / .zshrc
+alias cw='claude -w --settings <(~/.claude/hooks/merged-settings.sh --refine)'
+```
+
+Then just: `cw feature-x`
+
 ### Phase 3: Auto-approve (optional)
 
 If you trust your accumulated log and want to skip repeat prompts:
@@ -246,6 +275,20 @@ Aggregates rules from sibling worktrees' `.claude/settings.local.json` files (pe
 | `--refine --apply` | Refine + write to current worktree |
 | `--refine --apply-all` | Refine + write to all worktrees |
 | `--from-log` | Also include rules from the JSONL approval log (scoped to worktree CWDs) |
+
+### merged-settings.sh
+
+Outputs a complete `{"permissions":{"allow":[...],"deny":[...]}}` JSON document to stdout. Designed for `claude --settings <(merged-settings.sh)`.
+
+| Flag | Description |
+|------|-------------|
+| *(no flag)* | Same as `--merged` |
+| `--merged` | Merge global settings + all worktree rules |
+| `--refine` | Also apply safe-subcommand refinement to broad rules |
+| `--from-log` | Also include rules from JSONL approval log |
+| `--global-only` | Skip worktree discovery, use global settings only |
+
+All diagnostic output goes to stderr. stdout is pure JSON only.
 
 ## Environment Variables
 
