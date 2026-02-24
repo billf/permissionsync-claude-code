@@ -29,12 +29,14 @@ cp "$SCRIPT_DIR/log-permission.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/log-permission-auto.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/sync-permissions.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/worktree-sync.sh" "$HOOKS_DIR/"
+cp "$SCRIPT_DIR/merged-settings.sh" "$HOOKS_DIR/"
 chmod +x "$HOOKS_DIR/permissionsync-config.sh"
 chmod +x "$HOOKS_DIR/permissionsync-lib.sh"
 chmod +x "$HOOKS_DIR/log-permission.sh"
 chmod +x "$HOOKS_DIR/log-permission-auto.sh"
 chmod +x "$HOOKS_DIR/sync-permissions.sh"
 chmod +x "$HOOKS_DIR/worktree-sync.sh"
+chmod +x "$HOOKS_DIR/merged-settings.sh"
 echo "✓ Copied scripts to $HOOKS_DIR/"
 
 # 2. Choose which hook script to wire up
@@ -115,6 +117,9 @@ echo "    ~/.claude/hooks/sync-permissions.sh --apply     # write to settings.js
 echo ""
 echo "  To add sync as a shell alias:"
 echo '    alias claude-sync-perms="~/.claude/hooks/sync-permissions.sh"'
+echo ""
+echo "  To launch a worktree with merged permissions:"
+echo '    claude -w feature-x --settings <(~/.claude/hooks/merged-settings.sh --refine)'
 echo ""
 if [[ $MODE != "--auto" ]] && [[ $MODE != "--worktree" ]]; then
 	echo "  To enable auto-approve mode later:"

@@ -33,6 +33,7 @@ SCRIPTS=(
 	log-permission-auto.sh
 	sync-permissions.sh
 	worktree-sync.sh
+	merged-settings.sh
 )
 
 changed=0
