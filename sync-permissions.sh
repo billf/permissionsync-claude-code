@@ -50,36 +50,7 @@ if [[ $INIT_BASE -eq 0 ]] && [[ ! -f $LOG_FILE ]]; then
 	exit 1
 fi
 
-# --- Extract unique rules from the log, filtering out garbage ---
-# Valid permission rules are either:
-#   Bash(args...)      — e.g. Bash(git status *), Bash(gh pr *)
-#   WebFetch(...)      — e.g. WebFetch(domain:example.com), or bare WebFetch
-#   mcp__*             — MCP tool names
-# Bare file-tool names (Read, Write, Edit, MultiEdit) are excluded — these
-# tools don't benefit from blanket allow rules.
-# Also filters out rules with blocklisted binaries, shell keywords, and
-# invalid binary names.
-filter_rules() {
-	while IFS= read -r rule; do
-		[[ -z $rule ]] && continue
-		if [[ $rule == Bash\(* ]]; then
-			# Extract the binary from Bash(BINARY ...) rules
-			if [[ $rule =~ ^Bash\(([^\ \)]+) ]]; then
-				local bin="${BASH_REMATCH[1]}"
-				# Reject shells/interpreters
-				if is_blocklisted_binary "$bin"; then continue; fi
-				# Reject shell keywords (for, if, while, etc.)
-				if is_shell_keyword "$bin"; then continue; fi
-				# Reject invalid binary names (variable assignments, metacharacters)
-				if [[ ! $bin =~ ^[a-zA-Z0-9_.~/-]+$ ]]; then continue; fi
-			else
-				# Bash(...) but couldn't extract a valid binary — reject
-				continue
-			fi
-		fi
-		echo "$rule"
-	done
-}
+# filter_rules is now in permissionsync-lib.sh
 
 RULES_FROM_LOG=""
 EXISTING_RULES=""
@@ -151,26 +122,12 @@ expand_safe_direct_rules() {
 
 # --- Helper: compute refined rules (used by --refine preview and --refine --apply) ---
 compute_refined_rules() {
-	# Find broad rules that could be refined
-	BROAD_RULES=""
-	local bin
-	while IFS= read -r rule; do
-		[[ -z $rule ]] && continue
-		if [[ $rule =~ ^Bash\(([a-zA-Z0-9_-]+)\ \*\)$ ]]; then
-			bin="${BASH_REMATCH[1]}"
-			if has_subcommands "$bin"; then
-				BROAD_RULES="${BROAD_RULES}${rule}"$'\n'
-			fi
-		fi
-	done <<<"$ALL_RULES"
-	BROAD_RULES=$(echo "$BROAD_RULES" | sed '/^$/d')
+	# Core refinement (sets REFINED_RULES, BROAD_RULES, SAFE_RULES)
+	refine_rules_from "$ALL_RULES"
 
-	# Generate safe replacements
-	SAFE_RULES=$(expand_safe_direct_rules | sort -u)
-
-	# Collect observed non-safe subcommand rules from the log
+	# Collect observed non-safe subcommand rules from the log (informational only)
 	OBSERVED_RULES=""
-	local subcmd
+	local bin subcmd
 	while IFS= read -r rule; do
 		[[ -z $rule ]] && continue
 		# Match Bash(BINARY SUBCMD *) pattern
@@ -183,18 +140,6 @@ compute_refined_rules() {
 		fi
 	done <<<"$RULES_FROM_LOG"
 	OBSERVED_RULES=$(echo "$OBSERVED_RULES" | sed '/^$/d' | sort -u)
-
-	# Build refined rule set: start with current, remove broad, add fine-grained
-	REFINED_RULES="$ALL_RULES"
-	while IFS= read -r broad; do
-		[[ -z $broad ]] && continue
-		REFINED_RULES=$(echo "$REFINED_RULES" | grep -vxF "$broad" || true)
-	done <<<"$BROAD_RULES"
-
-	# Only include safe subcommand rules in the refined set.
-	# Observed non-safe commands are shown for informational
-	# purposes but require manual opt-in.
-	REFINED_RULES=$(printf '%s\n%s' "$REFINED_RULES" "$SAFE_RULES" | sed '/^$/d' | sort -u)
 }
 
 # --- Helper: write rules to settings.json ---

@@ -185,52 +185,13 @@ write_local_settings() {
 # ============================================================
 
 if [[ $REFINE -eq 1 ]]; then
-	# Reuse safe-subcommand expansion logic
-	# Find broad rules that could be refined
-	BROAD_RULES=""
-	while IFS= read -r rule; do
-		[[ -z $rule ]] && continue
-		if [[ $rule =~ ^Bash\(([a-zA-Z0-9_-]+)\ \*\)$ ]]; then
-			local_bin="${BASH_REMATCH[1]}"
-			if has_subcommands "$local_bin"; then
-				BROAD_RULES="${BROAD_RULES}${rule}"$'\n'
-			fi
-		fi
-	done <<<"$ALL_RULES"
-	BROAD_RULES=$(echo "$BROAD_RULES" | sed '/^$/d')
+	# Core refinement (sets REFINED_RULES, BROAD_RULES, SAFE_RULES)
+	refine_rules_from "$ALL_RULES"
 
 	if [[ -z $BROAD_RULES ]]; then
 		echo "No broad rules found that can be refined."
 		exit 0
 	fi
-
-	# Generate safe subcommand rules from all binaries present
-	SAFE_RULES=""
-	while IFS= read -r rule; do
-		[[ -z $rule ]] && continue
-		if [[ $rule =~ ^Bash\(([a-zA-Z0-9_-]+) ]]; then
-			local_bin="${BASH_REMATCH[1]}"
-			if has_subcommands "$local_bin"; then
-				safe_list=$(get_safe_subcommands "$local_bin")
-				alt_prefixes=$(get_alt_rule_prefixes "$local_bin")
-				for subcmd in $safe_list; do
-					SAFE_RULES="${SAFE_RULES}Bash(${local_bin} ${subcmd} *)"$'\n'
-					for prefix in $alt_prefixes; do
-						SAFE_RULES="${SAFE_RULES}Bash(${local_bin} ${prefix} * ${subcmd} *)"$'\n'
-					done
-				done
-			fi
-		fi
-	done <<<"$ALL_RULES"
-	SAFE_RULES=$(echo "$SAFE_RULES" | sed '/^$/d' | sort -u)
-
-	# Build refined rule set: remove broad, add fine-grained
-	REFINED_RULES="$ALL_RULES"
-	while IFS= read -r broad; do
-		[[ -z $broad ]] && continue
-		REFINED_RULES=$(echo "$REFINED_RULES" | grep -vxF "$broad" || true)
-	done <<<"$BROAD_RULES"
-	REFINED_RULES=$(printf '%s\n%s' "$REFINED_RULES" "$SAFE_RULES" | sed '/^$/d' | sort -u)
 
 	echo "=== Fine-Grained Rule Refinement (Worktree Aggregate) ==="
 	echo ""
