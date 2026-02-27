@@ -178,6 +178,44 @@ cmd_wt_log=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
 	"$TEST_HOME/.claude/settings.json")
 assert_eq "worktree->log updates command" "$expected_log" "$cmd_wt_log"
 
+# --- Test 9: fresh install seeds baseline permissions ---
+reset_home
+run_install
+
+allow_count=$(jq '.permissions.allow | length' "$TEST_HOME/.claude/settings.json")
+TEST_NUM=$((TEST_NUM + 1))
+if [[ $allow_count -gt 0 ]]; then
+	echo "ok ${TEST_NUM} - fresh install seeds baseline rules (${allow_count} rules)"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - should seed baseline rules on fresh install, got: ${allow_count}"
+	FAIL=$((FAIL + 1))
+fi
+
+# Verify a known rule is present
+has_git=$(jq 'any(.permissions.allow[]; . == "Bash(git status *)")' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "baseline includes git status rule" "true" "$has_git"
+
+has_fd=$(jq 'any(.permissions.allow[]; . == "Bash(fd *)")' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "baseline includes fd (always-safe) rule" "true" "$has_fd"
+
+# --- Test 10: re-install does NOT duplicate baseline rules ---
+prev_count=$(jq '.permissions.allow | length' "$TEST_HOME/.claude/settings.json")
+run_install --auto
+new_count=$(jq '.permissions.allow | length' "$TEST_HOME/.claude/settings.json")
+assert_eq "re-install does not add duplicate baseline rules" "$prev_count" "$new_count"
+
+# --- Test 11: install with pre-existing allow rules skips seeding ---
+reset_home
+mkdir -p "$TEST_HOME/.claude"
+echo '{"permissions": {"allow": ["Write"]}}' >"$TEST_HOME/.claude/settings.json"
+run_install
+
+allow_count_custom=$(jq '.permissions.allow | length' "$TEST_HOME/.claude/settings.json")
+assert_eq "pre-existing allow rules: seeding skipped (still 1 rule)" "1" "$allow_count_custom"
+
 echo "1..${TEST_NUM}"
 echo "# pass: ${PASS}"
 echo "# fail: ${FAIL}"

@@ -88,9 +88,27 @@ matcher=$(jq -r '.hooks.PermissionRequest[0].matcher' \
 	"$TEST_HOME/.claude/settings.json")
 assert_eq "log mode: matcher is wildcard" "*" "$matcher"
 
-# --- Test 3: First run reports changes ---
-assert_eq "first run reports installation" \
-	"permissionsync-cc: hooks installed (log mode)" "$output"
+# --- Test 3: First run reports changes (output includes installed message) ---
+TEST_NUM=$((TEST_NUM + 1))
+if echo "$output" | grep -qF "permissionsync-cc: hooks installed (log mode)"; then
+	echo "ok ${TEST_NUM} - first run reports installation"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - first run reports installation"
+	echo "#   output was: '${output}'"
+	FAIL=$((FAIL + 1))
+fi
+
+# --- Test 3b: First run seeds baseline permissions ---
+TEST_NUM=$((TEST_NUM + 1))
+if echo "$output" | grep -qF "seeded"; then
+	echo "ok ${TEST_NUM} - first run seeds baseline rules"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - first run should seed baseline rules"
+	echo "#   output was: '${output}'"
+	FAIL=$((FAIL + 1))
+fi
 
 # --- Test 4: Second run is a no-op (idempotent) ---
 output2=$(run_setup log)

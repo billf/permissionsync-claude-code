@@ -26,6 +26,35 @@ HOOKS_DIR="$HOME/.claude/hooks"
 SETTINGS="$HOME/.claude/settings.json"
 MODE="${1:-log}"
 
+# seed_baseline_permissions HOOKS_DIR SETTINGS
+#
+# Pre-seeds settings.json with curated safe-subcommand rules from config.
+# Idempotent: skips if permissions.allow already has any entries.
+seed_baseline_permissions() {
+	local hooks_dir="$1" settings="$2"
+	# shellcheck source=permissionsync-lib.sh
+	source "${hooks_dir}/permissionsync-lib.sh"
+
+	local existing_count
+	existing_count=$(jq '.permissions.allow | length' "$settings" 2>/dev/null || echo 0)
+	if [[ $existing_count -gt 0 ]]; then
+		return 0 # Already has rules — skip seeding
+	fi
+
+	local rules_json
+	rules_json=$(generate_baseline_rules | sort -u | jq -R -s 'split("\n") | map(select(length > 0))')
+
+	local tmp
+	tmp=$(mktemp)
+	jq --argjson rules "$rules_json" \
+		'.permissions //= {} | .permissions.allow //= [] | .permissions.allow += $rules | .permissions.allow |= unique | .permissions.allow |= sort' \
+		"$settings" >"$tmp" && mv "$tmp" "$settings"
+
+	local count
+	count=$(echo "$rules_json" | jq 'length')
+	echo "permissionsync-cc: seeded $count baseline rules into settings.json"
+}
+
 SCRIPTS=(
 	permissionsync-config.sh
 	permissionsync-lib.sh
@@ -111,7 +140,10 @@ else
 	rm -f "$TEMP"
 fi
 
-# 4. Report only when something changed
+# 4. Seed baseline permissions (idempotent — skips if allow rules already exist)
+seed_baseline_permissions "$HOOKS_DIR" "$SETTINGS"
+
+# 5. Report only when something changed
 if [[ $changed -eq 1 ]]; then
 	echo "permissionsync-cc: hooks installed ($MODE mode)"
 fi

@@ -453,6 +453,37 @@ refine_rules_from() {
 	REFINED_RULES=$(printf '%s\n%s' "$REFINED_RULES" "$SAFE_RULES" | sed '/^$/d' | sort -u)
 }
 
+# generate_baseline_rules
+#
+# Generates all safe-subcommand rules from the tracked binaries in
+# permissionsync-config.sh. Suitable for seeding settings.json on first install.
+#
+# For binaries with subcommand tables: calls refine_rules_from() on a synthetic
+# "Bash(binary *)" input to produce fine-grained rules.
+# For always-safe binaries: emits "Bash(binary *)" directly.
+#
+# Writes newline-separated rules to stdout.
+generate_baseline_rules() {
+	local synthetic_rules="" binary
+
+	for binary in $(get_all_tracked_binaries); do
+		synthetic_rules="${synthetic_rules}Bash(${binary} *)"$'\n'
+	done
+
+	# Expand broad rules to fine-grained safe subcommand rules.
+	# refine_rules_from removes broad "Bash(binary *)" entries and replaces them
+	# with the curated fine-grained subcommand rules. REFINED_RULES contains only
+	# the fine-grained rules after this call.
+	refine_rules_from "$synthetic_rules"
+	echo "$REFINED_RULES"
+
+	# Always-safe binaries (fd, rg, bat, etc.) have no subcommand structure;
+	# a single broad rule is appropriate.
+	for binary in $(get_all_always_safe_binaries); do
+		echo "Bash(${binary} *)"
+	done
+}
+
 # build_rule_v2 TOOL_NAME TOOL_INPUT_JSON
 #
 # Builds a permission rule string from a tool invocation.
