@@ -18,6 +18,7 @@
       executableScripts = [
         "log-permission.sh"
         "log-permission-auto.sh"
+        "log-confirmed.sh"
         "sync-permissions.sh"
         "worktree-sync.sh"
         "merged-settings.sh"

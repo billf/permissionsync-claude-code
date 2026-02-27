@@ -60,6 +60,7 @@ SCRIPTS=(
 	permissionsync-lib.sh
 	log-permission.sh
 	log-permission-auto.sh
+	log-confirmed.sh
 	sync-permissions.sh
 	worktree-sync.sh
 	merged-settings.sh
@@ -153,7 +154,37 @@ else
 	rm -f "$TEMP"
 fi
 
-# 4. Seed baseline permissions (idempotent — skips if allow rules already exist)
+# 4. Wire PostToolUse hook for confirmed-approvals log (idempotent)
+CONFIRMED_CMD="$HOOKS_DIR/log-confirmed.sh"
+TEMP2=$(mktemp)
+if ! jq \
+	--arg cmd "$CONFIRMED_CMD" '
+    .hooks //= {} |
+    .hooks.PostToolUse //= [] |
+    .hooks.PostToolUse = (
+      [
+        .hooks.PostToolUse[]
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | select((.hooks | length) > 0)
+      ] + [{
+        matcher: "*",
+        hooks: [{type: "command", command: $cmd}]
+      }]
+    )
+  ' "$SETTINGS" >"$TEMP2"; then
+	echo "permissionsync-cc: ERROR: failed to wire PostToolUse hook" >&2
+	rm -f "$TEMP2"
+	exit 1
+fi
+if ! cmp -s "$SETTINGS" "$TEMP2"; then
+	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+	mv "$TEMP2" "$SETTINGS"
+	changed=1
+else
+	rm -f "$TEMP2"
+fi
+
+# 5. Seed baseline permissions (idempotent — skips if allow rules already exist)
 seed_baseline_permissions "$HOOKS_DIR" "$SETTINGS"
 
 # 5. Report only when something changed

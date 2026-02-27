@@ -18,26 +18,36 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=permissionsync-lib.sh
 source "${SCRIPT_DIR}/permissionsync-lib.sh"
 
-LOG_FILE="${CLAUDE_PERMISSION_LOG:-$HOME/.claude/permission-approvals.jsonl}"
+BASE_LOG="${CLAUDE_PERMISSION_LOG:-$HOME/.claude/permission-approvals.jsonl}"
+CONFIRMED_LOG="$(dirname "$BASE_LOG")/confirmed-approvals.jsonl"
+LOG_FILE="$BASE_LOG"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
 # Parse flags
 REFINE=0
 APPLY=0
 INIT_BASE=0
+FROM_CONFIRMED=0
 MODE=""
 for arg in "$@"; do
 	case "$arg" in
 	--refine) REFINE=1 ;;
 	--apply) APPLY=1 ;;
 	--init-base) INIT_BASE=1 ;;
+	--from-confirmed) FROM_CONFIRMED=1 ;;
 	--preview | --print | --diff) MODE="$arg" ;;
 	*)
-		echo "Usage: $0 [--preview|--apply|--print|--diff|--refine|--init-base] [--apply]"
+		echo "Usage: $0 [--preview|--apply|--print|--diff|--refine|--init-base|--from-confirmed] [--apply]"
 		exit 1
 		;;
 	esac
 done
+
+# --from-confirmed: use confirmed-approvals.jsonl as the rule source
+if [[ $FROM_CONFIRMED -eq 1 ]]; then
+	LOG_FILE="$CONFIRMED_LOG"
+fi
+
 # Default to --preview if nothing specified
 if [[ $REFINE -eq 0 ]] && [[ $APPLY -eq 0 ]] && [[ $INIT_BASE -eq 0 ]] && [[ -z $MODE ]]; then
 	MODE="--preview"
@@ -45,8 +55,13 @@ fi
 
 # --init-base doesn't need the approval log
 if [[ $INIT_BASE -eq 0 ]] && [[ ! -f $LOG_FILE ]]; then
-	echo "No approval log found at $LOG_FILE"
-	echo "Run Claude Code with the PermissionRequest hook first."
+	if [[ $FROM_CONFIRMED -eq 1 ]]; then
+		echo "No confirmed-approvals log found at $LOG_FILE"
+		echo "Run Claude Code with the PostToolUse hook first (install with --auto or --worktree mode)."
+	else
+		echo "No approval log found at $LOG_FILE"
+		echo "Run Claude Code with the PermissionRequest hook first."
+	fi
 	exit 1
 fi
 

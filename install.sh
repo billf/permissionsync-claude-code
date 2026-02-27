@@ -58,6 +58,7 @@ cp "$SCRIPT_DIR/permissionsync-config.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/permissionsync-lib.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/log-permission.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/log-permission-auto.sh" "$HOOKS_DIR/"
+cp "$SCRIPT_DIR/log-confirmed.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/sync-permissions.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/worktree-sync.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/merged-settings.sh" "$HOOKS_DIR/"
@@ -65,6 +66,7 @@ chmod +x "$HOOKS_DIR/permissionsync-config.sh"
 chmod +x "$HOOKS_DIR/permissionsync-lib.sh"
 chmod +x "$HOOKS_DIR/log-permission.sh"
 chmod +x "$HOOKS_DIR/log-permission-auto.sh"
+chmod +x "$HOOKS_DIR/log-confirmed.sh"
 chmod +x "$HOOKS_DIR/sync-permissions.sh"
 chmod +x "$HOOKS_DIR/worktree-sync.sh"
 chmod +x "$HOOKS_DIR/merged-settings.sh"
@@ -147,7 +149,37 @@ else
 	echo "✓ Hook already installed in $SETTINGS"
 fi
 
-# 4. Seed baseline permissions (skips if settings already has allow rules)
+# 4. Wire PostToolUse hook for confirmed-approvals log
+CONFIRMED_CMD="$HOOKS_DIR/log-confirmed.sh"
+TEMP2=$(mktemp)
+if ! jq \
+	--arg cmd "$CONFIRMED_CMD" '
+    .hooks //= {} |
+    .hooks.PostToolUse //= [] |
+    .hooks.PostToolUse = (
+      [
+        .hooks.PostToolUse[]
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | select((.hooks | length) > 0)
+      ] + [{
+        matcher: "*",
+        hooks: [{type: "command", command: $cmd}]
+      }]
+    )
+  ' "$SETTINGS" >"$TEMP2"; then
+	echo "ERROR: Failed to wire PostToolUse hook in $SETTINGS"
+	rm -f "$TEMP2"
+	exit 1
+fi
+if ! cmp -s "$SETTINGS" "$TEMP2"; then
+	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+	mv "$TEMP2" "$SETTINGS"
+	echo "✓ Wired PostToolUse hook (confirmed-approvals log)"
+else
+	rm -f "$TEMP2"
+fi
+
+# 5. Seed baseline permissions (skips if settings already has allow rules)
 seed_baseline_permissions "$HOOKS_DIR" "$SETTINGS"
 
 echo ""
