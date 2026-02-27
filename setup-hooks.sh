@@ -64,6 +64,7 @@ SCRIPTS=(
 	sync-permissions.sh
 	worktree-sync.sh
 	merged-settings.sh
+	permissionsync-launch.sh
 )
 
 changed=0
