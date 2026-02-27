@@ -184,10 +184,72 @@ assert_not_safe_compound "gh" "issue" "create"
 assert_not_safe_compound "gh" "repo" "clone"
 assert_not_safe_compound "gh" "run" "cancel"
 
+# rustup safe subcommands
+assert_safe "rustup" "show"
+assert_safe "rustup" "check"
+assert_safe_compound "rustup" "toolchain" "list"
+assert_safe_compound "rustup" "target" "list"
+assert_safe_compound "rustup" "component" "list"
+
+# rustup unsafe (write operations)
+assert_not_safe "rustup" "update"
+assert_not_safe "rustup" "install"
+assert_not_safe "rustup" "uninstall"
+
+# yarn safe subcommands
+assert_safe "yarn" "ls"
+assert_safe "yarn" "list"
+assert_safe "yarn" "outdated"
+assert_safe "yarn" "info"
+assert_safe "yarn" "why"
+
+# yarn unsafe
+assert_not_safe "yarn" "install"
+assert_not_safe "yarn" "add"
+assert_not_safe "yarn" "remove"
+
+# pnpm safe subcommands
+assert_safe "pnpm" "ls"
+assert_safe "pnpm" "list"
+assert_safe "pnpm" "outdated"
+assert_safe "pnpm" "info"
+assert_safe "pnpm" "why"
+
+# pnpm unsafe
+assert_not_safe "pnpm" "install"
+assert_not_safe "pnpm" "add"
+assert_not_safe "pnpm" "remove"
+
+# jj safe subcommands
+assert_safe "jj" "status"
+assert_safe "jj" "log"
+assert_safe "jj" "diff"
+assert_safe "jj" "show"
+assert_safe_compound "jj" "branch" "list"
+assert_safe_compound "jj" "op" "log"
+
+# jj unsafe
+assert_not_safe "jj" "commit"
+assert_not_safe "jj" "edit"
+assert_not_safe "jj" "abandon"
+assert_not_safe "jj" "squash"
+
+# terraform safe subcommands
+assert_safe "terraform" "validate"
+assert_safe "terraform" "show"
+assert_safe "terraform" "providers"
+assert_safe "terraform" "version"
+
+# terraform unsafe
+assert_not_safe "terraform" "apply"
+assert_not_safe "terraform" "destroy"
+assert_not_safe "terraform" "import"
+assert_not_safe "terraform" "plan"
+
 # Unknown binary
 assert_not_safe "unknown_tool" "whatever"
 
-# has_subcommands
+# has_subcommands — original binaries
 assert_has_subcommands "gh"
 assert_has_subcommands "git"
 assert_has_subcommands "cargo"
@@ -198,10 +260,55 @@ assert_has_subcommands "pip"
 assert_has_subcommands "brew"
 assert_has_subcommands "nix"
 
-# No subcommands for unknown binaries
+# has_subcommands — new binaries
+assert_has_subcommands "rustup"
+assert_has_subcommands "yarn"
+assert_has_subcommands "pnpm"
+assert_has_subcommands "jj"
+assert_has_subcommands "terraform"
+
+# No subcommands for always-safe or unknown binaries
+assert_no_subcommands "fd"
+assert_no_subcommands "rg"
+assert_no_subcommands "bat"
 assert_no_subcommands "ls"
 assert_no_subcommands "cat"
 assert_no_subcommands "unknown_tool"
+
+# is_always_safe_binary tests
+assert_always_safe() {
+	local binary="$1"
+	TEST_NUM=$((TEST_NUM + 1))
+	if is_always_safe_binary "$binary"; then
+		echo "ok ${TEST_NUM} - ${binary} is always safe"
+		PASS=$((PASS + 1))
+	else
+		echo "not ok ${TEST_NUM} - ${binary} should be always safe"
+		FAIL=$((FAIL + 1))
+	fi
+}
+
+assert_not_always_safe() {
+	local binary="$1"
+	TEST_NUM=$((TEST_NUM + 1))
+	if ! is_always_safe_binary "$binary"; then
+		echo "ok ${TEST_NUM} - ${binary} is not always safe"
+		PASS=$((PASS + 1))
+	else
+		echo "not ok ${TEST_NUM} - ${binary} should NOT be always safe"
+		FAIL=$((FAIL + 1))
+	fi
+}
+
+assert_always_safe "fd"
+assert_always_safe "rg"
+assert_always_safe "bat"
+assert_always_safe "delta"
+assert_always_safe "difftastic"
+assert_not_always_safe "git"
+assert_not_always_safe "rm"
+assert_not_always_safe "curl"
+assert_not_always_safe "unknown_tool"
 
 echo "1..${TEST_NUM}"
 echo "# pass: ${PASS}"

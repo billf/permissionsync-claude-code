@@ -292,6 +292,60 @@ assert_rule "Bash" '{"command":"nix eval .#something"}' \
 assert_rule "Bash" '{"command":"nix develop"}' \
 	"Bash(nix develop *)" "nix develop" "false" ""
 
+# --- Always-safe binaries: IS_SAFE=true regardless of args ---
+assert_rule "Bash" '{"command":"fd . --type f"}' \
+	"Bash(fd *)" "fd" "true" ""
+
+assert_rule "Bash" '{"command":"rg --hidden pattern src/"}' \
+	"Bash(rg *)" "rg" "true" ""
+
+assert_rule "Bash" '{"command":"bat src/main.rs"}' \
+	"Bash(bat *)" "bat" "true" ""
+
+assert_rule "Bash" '{"command":"delta HEAD~1"}' \
+	"Bash(delta *)" "delta" "true" ""
+
+assert_rule "Bash" '{"command":"difftastic old.rs new.rs"}' \
+	"Bash(difftastic *)" "difftastic" "true" ""
+
+# Always-safe binaries: metacharacters should still prevent IS_SAFE
+assert_rule "Bash" '{"command":"rg foo | head"}' \
+	"Bash(rg *)" "rg" "false" ""
+
+# --- New tracked binaries: compound key rules ---
+assert_rule "Bash" '{"command":"rustup show"}' \
+	"Bash(rustup show *)" "rustup show" "true" ""
+
+assert_rule "Bash" '{"command":"rustup toolchain list"}' \
+	"Bash(rustup toolchain list *)" "rustup toolchain list" "true" ""
+
+assert_rule "Bash" '{"command":"rustup update stable"}' \
+	"Bash(rustup update *)" "rustup update" "false" ""
+
+assert_rule "Bash" '{"command":"yarn list --depth=0"}' \
+	"Bash(yarn list *)" "yarn list" "true" ""
+
+assert_rule "Bash" '{"command":"yarn add react"}' \
+	"Bash(yarn add *)" "yarn add" "false" ""
+
+assert_rule "Bash" '{"command":"pnpm list"}' \
+	"Bash(pnpm list *)" "pnpm list" "true" ""
+
+assert_rule "Bash" '{"command":"jj log --limit 5"}' \
+	"Bash(jj log *)" "jj log" "true" ""
+
+assert_rule "Bash" '{"command":"jj branch list"}' \
+	"Bash(jj branch list *)" "jj branch list" "true" ""
+
+assert_rule "Bash" '{"command":"jj commit -m msg"}' \
+	"Bash(jj commit *)" "jj commit" "false" ""
+
+assert_rule "Bash" '{"command":"terraform validate"}' \
+	"Bash(terraform validate *)" "terraform validate" "true" ""
+
+assert_rule "Bash" '{"command":"terraform apply -auto-approve"}' \
+	"Bash(terraform apply *)" "terraform apply" "false" ""
+
 # --- Safe commands without metacharacters should still be safe ---
 assert_rule "Bash" '{"command":"git status --short"}' \
 	"Bash(git status *)" "git status" "true" ""

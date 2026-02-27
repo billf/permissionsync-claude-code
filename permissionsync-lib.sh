@@ -627,6 +627,10 @@ build_rule_v2() {
 			elif [[ -n $binary ]]; then
 				RULE="Bash(${binary} *)"
 				BASE_COMMAND="${binary}"
+				if [[ $has_metachar -eq 0 ]] && [[ $is_multiline -eq 0 ]] &&
+					is_always_safe_binary "$binary"; then
+					IS_SAFE="true"
+				fi
 			else
 				RULE="Bash"
 				BASE_COMMAND=""

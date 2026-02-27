@@ -60,10 +60,60 @@ get_safe_subcommands() {
 			"gist:list gist:view" \
 			"auth:status"
 		;;
+	rustup)
+		# Read-only inspection. Excluded: update/install/uninstall (modify toolchains),
+		#   run (executes arbitrary commands), override/default (modify state)
+		# Compound keys: toolchain:list → "rustup toolchain list"
+		echo "show check" \
+			"toolchain:list target:list component:list"
+		;;
+	yarn)
+		# Excluded: install, add, remove, upgrade, link (modify dependencies/state)
+		echo "ls list outdated info why"
+		;;
+	pnpm)
+		# Excluded: install, add, remove, update, link (modify dependencies/state)
+		echo "ls list outdated info why"
+		;;
+	jj)
+		# Read-only ops. Excluded: commit, edit, abandon, squash, rebase, restore,
+		#   new, describe (modify repo state)
+		# Compound keys: branch:list → "jj branch list", op:log → "jj op log"
+		echo "status log diff show" \
+			"branch:list op:log"
+		;;
+	terraform)
+		# Excluded: apply (modifies infra), destroy, import, init (downloads providers),
+		#   plan -out (saves plan file), force-unlock (dangerous)
+		echo "validate show providers version"
+		;;
 	*)
 		echo ""
 		;;
 	esac
+}
+
+# is_always_safe_binary BINARY → 0 if BINARY is always safe regardless of arguments
+# (read-only display and search tools with no write capabilities)
+is_always_safe_binary() {
+	case "$1" in
+	fd | rg | bat | delta | difftastic)
+		return 0
+		;;
+	*)
+		return 1
+		;;
+	esac
+}
+
+# get_all_tracked_binaries → space-separated list of all binaries with safe-subcommand tables
+get_all_tracked_binaries() {
+	echo "git cargo npm nix docker kubectl pip brew gh rustup yarn pnpm jj terraform"
+}
+
+# get_all_always_safe_binaries → space-separated list of always-safe binaries
+get_all_always_safe_binaries() {
+	echo "fd rg bat delta difftastic"
 }
 
 # get_indirection_type WORD → peeling type or empty string
