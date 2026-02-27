@@ -23,6 +23,7 @@
         "worktree-sync.sh"
         "merged-settings.sh"
         "permissionsync-launch.sh"
+        "permissionsync.sh"
         "setup-hooks.sh"
       ];
 
