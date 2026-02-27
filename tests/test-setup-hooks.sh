@@ -53,8 +53,8 @@ echo "TAP version 13"
 reset_home() {
 	rm -rf "$TEST_HOME"
 	TEST_HOME="$(mktemp -d)"
-	expected_log="$TEST_HOME/.claude/hooks/log-permission.sh"
-	expected_auto="CLAUDE_PERMISSION_AUTO=1 $TEST_HOME/.claude/hooks/log-permission-auto.sh"
+	expected_log="CLAUDE_PERMISSION_MODE=log $TEST_HOME/.claude/hooks/log-permission-auto.sh"
+	expected_auto="CLAUDE_PERMISSION_MODE=auto $TEST_HOME/.claude/hooks/log-permission-auto.sh"
 }
 
 reset_home
@@ -81,7 +81,7 @@ assert_file_exists "log mode: creates settings.json" \
 
 hook_cmd=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
 	"$TEST_HOME/.claude/settings.json")
-assert_eq "log mode: hook command points to log-permission.sh" \
+assert_eq "log mode: hook command uses CLAUDE_PERMISSION_MODE=log" \
 	"$expected_log" "$hook_cmd"
 
 matcher=$(jq -r '.hooks.PermissionRequest[0].matcher' \
@@ -248,12 +248,12 @@ assert_eq "mixed entry keeps custom hook" "1" "$mixed_custom_count"
 
 # --- Test 12: Worktree mode sets correct hook command ---
 reset_home
-expected_worktree="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $TEST_HOME/.claude/hooks/log-permission-auto.sh"
+expected_worktree="CLAUDE_PERMISSION_MODE=worktree $TEST_HOME/.claude/hooks/log-permission-auto.sh"
 run_setup worktree >/dev/null
 
 hook_cmd_worktree=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
 	"$TEST_HOME/.claude/settings.json")
-assert_eq "worktree mode: hook command includes CLAUDE_PERMISSION_WORKTREE=1" \
+assert_eq "worktree mode: hook command uses CLAUDE_PERMISSION_MODE=worktree" \
 	"$expected_worktree" "$hook_cmd_worktree"
 
 # --- Test 13: Worktree mode copies worktree-sync.sh ---
@@ -262,7 +262,7 @@ assert_file_exists "worktree mode: creates worktree-sync.sh" \
 
 # --- Test 14: Switching auto->worktree keeps one hook entry ---
 reset_home
-expected_worktree="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $TEST_HOME/.claude/hooks/log-permission-auto.sh"
+expected_worktree="CLAUDE_PERMISSION_MODE=worktree $TEST_HOME/.claude/hooks/log-permission-auto.sh"
 run_setup auto >/dev/null
 run_setup worktree >/dev/null
 

@@ -80,18 +80,23 @@ done
 # 2. Determine hook command based on mode
 case "$MODE" in
 auto)
-	HOOK_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
+	HOOK_CMD="CLAUDE_PERMISSION_MODE=auto $HOOKS_DIR/log-permission-auto.sh"
 	;;
 worktree)
-	HOOK_CMD="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
+	HOOK_CMD="CLAUDE_PERMISSION_MODE=worktree $HOOKS_DIR/log-permission-auto.sh"
 	;;
 *)
-	HOOK_CMD="$HOOKS_DIR/log-permission.sh"
+	HOOK_CMD="CLAUDE_PERMISSION_MODE=log $HOOKS_DIR/log-permission-auto.sh"
 	;;
 esac
+# All managed command patterns (legacy and new-style) — used to identify and
+# replace previously-installed managed hook entries.
 MANAGED_LOG_CMD="$HOOKS_DIR/log-permission.sh"
+MANAGED_MODE_LOG_CMD="CLAUDE_PERMISSION_MODE=log $HOOKS_DIR/log-permission-auto.sh"
 MANAGED_AUTO_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
+MANAGED_MODE_AUTO_CMD="CLAUDE_PERMISSION_MODE=auto $HOOKS_DIR/log-permission-auto.sh"
 MANAGED_WORKTREE_CMD="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
+MANAGED_MODE_WORKTREE_CMD="CLAUDE_PERMISSION_MODE=worktree $HOOKS_DIR/log-permission-auto.sh"
 
 # 3. Ensure settings.json has the PermissionRequest hook entry
 if [[ ! -f $SETTINGS ]]; then
@@ -104,8 +109,11 @@ TEMP=$(mktemp)
 if ! jq \
 	--arg cmd "$HOOK_CMD" \
 	--arg managed_log "$MANAGED_LOG_CMD" \
+	--arg managed_mode_log "$MANAGED_MODE_LOG_CMD" \
 	--arg managed_auto "$MANAGED_AUTO_CMD" \
-	--arg managed_worktree "$MANAGED_WORKTREE_CMD" '
+	--arg managed_mode_auto "$MANAGED_MODE_AUTO_CMD" \
+	--arg managed_worktree "$MANAGED_WORKTREE_CMD" \
+	--arg managed_mode_worktree "$MANAGED_MODE_WORKTREE_CMD" '
     .hooks //= {} |
     .hooks.PermissionRequest //= [] |
     .hooks.PermissionRequest = (
@@ -115,7 +123,12 @@ if ! jq \
             (.hooks // [])
             | map(
                 select(
-                  (.command == $managed_log or .command == $managed_auto or .command == $managed_worktree)
+                  (.command == $managed_log
+                   or .command == $managed_mode_log
+                   or .command == $managed_auto
+                   or .command == $managed_mode_auto
+                   or .command == $managed_worktree
+                   or .command == $managed_mode_worktree)
                   | not
                 )
               )

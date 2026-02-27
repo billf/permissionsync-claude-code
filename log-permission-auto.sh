@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
-# claude-permission-logger: PermissionRequest hook (auto-approve variant)
+# permissionsync-hook: PermissionRequest hook
 #
 # 1. Logs every permission request to ~/.claude/permission-approvals.jsonl
-# 2. Auto-approves safe subcommands (e.g. git status, cargo check) immediately
-# 3. On *subsequent* sessions, rules already in the log can be auto-approved
-#    via the companion sync script, or you can run this hook in "auto" mode
-#    to approve anything previously seen.
+# 2. Auto-approves curated safe subcommands (e.g. git status, cargo check)
+# 3. Optionally auto-approves previously-seen rules from the log
+# 4. Optionally auto-approves rules from sibling worktrees
 #
-# Environment:
-#   CLAUDE_PERMISSION_LOG       - override log path (default: ~/.claude/permission-approvals.jsonl)
-#   CLAUDE_PERMISSION_AUTO      - set to "1" to auto-approve any rule already in the log
-#   CLAUDE_PERMISSION_WORKTREE  - set to "1" to auto-approve rules from sibling worktrees
+# Environment (choose one):
+#   CLAUDE_PERMISSION_MODE=log       # log only, interactive prompt for everything else
+#   CLAUDE_PERMISSION_MODE=auto      # log + auto-approve previously-seen rules
+#   CLAUDE_PERMISSION_MODE=worktree  # log + auto-approve from sibling worktrees + history
+#
+# Legacy environment (still supported for backward compatibility):
+#   CLAUDE_PERMISSION_AUTO=1         # same as MODE=auto
+#   CLAUDE_PERMISSION_WORKTREE=1     # same as MODE=worktree (also enables auto)
+#
+# Other:
+#   CLAUDE_PERMISSION_LOG            # override log path (default: ~/.claude/permission-approvals.jsonl)
 
 set -euo pipefail
 
@@ -19,7 +25,33 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/permissionsync-lib.sh"
 
 LOG_FILE="${CLAUDE_PERMISSION_LOG:-$HOME/.claude/permission-approvals.jsonl}"
-AUTO_MODE="${CLAUDE_PERMISSION_AUTO:-0}"
+
+# Resolve CLAUDE_PERMISSION_MODE from the enum or legacy vars
+_MODE="${CLAUDE_PERMISSION_MODE:-}"
+if [[ -z $_MODE ]]; then
+	# Legacy: CLAUDE_PERMISSION_WORKTREE=1 implies worktree mode
+	if [[ ${CLAUDE_PERMISSION_WORKTREE:-0} == "1" ]]; then
+		_MODE="worktree"
+	elif [[ ${CLAUDE_PERMISSION_AUTO:-0} == "1" ]]; then
+		_MODE="auto"
+	else
+		_MODE="log"
+	fi
+fi
+
+AUTO_MODE="0"
+WORKTREE_MODE="0"
+case "$_MODE" in
+worktree)
+	AUTO_MODE="1"
+	WORKTREE_MODE="1"
+	;;
+auto)
+	AUTO_MODE="1"
+	;;
+*) ;;
+esac
+
 INPUT=$(</dev/stdin)
 
 # Parse all fields in a single jq call to minimize subprocess overhead
@@ -65,7 +97,6 @@ if [[ $IS_SAFE == "true" ]]; then
 fi
 
 # --- Sibling worktree auto-approve ---
-WORKTREE_MODE="${CLAUDE_PERMISSION_WORKTREE:-0}"
 if [[ $WORKTREE_MODE == "1" ]]; then
 	if is_in_worktree; then
 		if read_sibling_rules; then

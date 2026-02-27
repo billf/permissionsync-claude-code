@@ -30,8 +30,8 @@ assert_eq() {
 reset_home() {
 	rm -rf "$TEST_HOME"
 	TEST_HOME="$(mktemp -d)"
-	expected_log="$TEST_HOME/.claude/hooks/log-permission.sh"
-	expected_auto="CLAUDE_PERMISSION_AUTO=1 $TEST_HOME/.claude/hooks/log-permission-auto.sh"
+	expected_log="CLAUDE_PERMISSION_MODE=log $TEST_HOME/.claude/hooks/log-permission-auto.sh"
+	expected_auto="CLAUDE_PERMISSION_MODE=auto $TEST_HOME/.claude/hooks/log-permission-auto.sh"
 }
 
 run_install() {
@@ -55,7 +55,7 @@ assert_eq "log mode installs one hook entry" "1" "$count"
 
 cmd=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
 	"$TEST_HOME/.claude/settings.json")
-assert_eq "log mode uses log-permission.sh" "$expected_log" "$cmd"
+assert_eq "log mode uses CLAUDE_PERMISSION_MODE=log log-permission-auto.sh" "$expected_log" "$cmd"
 
 # --- Test 2: mode switch log->auto keeps one entry and updates command ---
 run_install --auto
@@ -77,7 +77,7 @@ assert_eq "auto->log keeps one hook entry" "1" "$count"
 
 cmd=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
 	"$TEST_HOME/.claude/settings.json")
-assert_eq "auto->log updates command" "$expected_log" "$cmd"
+assert_eq "auto->log updates command to MODE=log" "$expected_log" "$cmd"
 
 # --- Test 4: collapses pre-existing managed duplicates and keeps non-managed ---
 reset_home
@@ -151,12 +151,12 @@ assert_eq "mixed entry keeps custom hook" "1" "$custom_mixed_count"
 
 # --- Test 6: --worktree mode sets correct hook command ---
 reset_home
-expected_worktree="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $TEST_HOME/.claude/hooks/log-permission-auto.sh"
+expected_worktree="CLAUDE_PERMISSION_MODE=worktree $TEST_HOME/.claude/hooks/log-permission-auto.sh"
 run_install --worktree
 
 cmd_wt=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
 	"$TEST_HOME/.claude/settings.json")
-assert_eq "--worktree: hook command includes CLAUDE_PERMISSION_WORKTREE=1" \
+assert_eq "--worktree: hook command uses CLAUDE_PERMISSION_MODE=worktree" \
 	"$expected_worktree" "$cmd_wt"
 
 count_wt=$(jq '[.hooks.PermissionRequest[]?.hooks[]?.command] | length' \
@@ -176,7 +176,7 @@ assert_eq "worktree->log keeps one hook entry" "1" "$count_wt_log"
 
 cmd_wt_log=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
 	"$TEST_HOME/.claude/settings.json")
-assert_eq "worktree->log updates command" "$expected_log" "$cmd_wt_log"
+assert_eq "worktree->log updates command to MODE=log" "$expected_log" "$cmd_wt_log"
 
 # --- Test 9: fresh install seeds baseline permissions ---
 reset_home

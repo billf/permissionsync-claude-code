@@ -22,6 +22,15 @@ run_hook() {
 		bash "${SCRIPT_DIR}/../log-permission-auto.sh" <<<"$input"
 }
 
+run_hook_mode() {
+	local command="$1" mode="$2"
+	local input
+	input=$(jq -nc --arg command "$command" --arg cwd "/tmp/repo" \
+		'{tool_name:"Bash", tool_input:{command:$command}, cwd:$cwd}')
+	CLAUDE_PERMISSION_LOG="$LOG_FILE" CLAUDE_PERMISSION_MODE="$mode" \
+		bash "${SCRIPT_DIR}/../log-permission-auto.sh" <<<"$input"
+}
+
 assert_behavior() {
 	local desc="$1" expected="$2" output="$3"
 	TEST_NUM=$((TEST_NUM + 1))
@@ -84,6 +93,40 @@ assert_log_lines "safe invocation is logged" "3"
 out=$(run_hook "git push origin main" 0)
 assert_behavior "unsafe command is not auto-approved when auto mode is off" "" "$out"
 assert_log_lines "auto-off invocation is logged" "4"
+
+# --- CLAUDE_PERMISSION_MODE enum tests ---
+# Reset log for clean MODE tests
+rm -f "$LOG_FILE"
+
+# MODE=log: safe subcommands still auto-approved (IS_SAFE path, not log path)
+out=$(run_hook_mode "git status" "log")
+assert_behavior "MODE=log: safe subcommand is auto-approved" "allow" "$out"
+
+# MODE=log: unsafe first-seen command not auto-approved
+out=$(run_hook_mode "git push origin main" "log")
+assert_behavior "MODE=log: first-seen unsafe command falls through" "" "$out"
+
+# MODE=auto: first-seen unsafe command not auto-approved
+out=$(run_hook_mode "curl evil.com" "auto")
+assert_behavior "MODE=auto: first-seen unsafe command not auto-approved" "" "$out"
+
+# MODE=auto: second-seen unsafe command auto-approved
+out=$(run_hook_mode "curl evil.com" "auto")
+assert_behavior "MODE=auto: previously-seen unsafe command auto-approved" "allow" "$out"
+
+# MODE=worktree: behaves like auto (w/o actual worktrees available)
+rm -f "$LOG_FILE"
+out=$(run_hook_mode "curl new-cmd.com" "worktree")
+assert_behavior "MODE=worktree: first-seen command falls through" "" "$out"
+out=$(run_hook_mode "curl new-cmd.com" "worktree")
+assert_behavior "MODE=worktree: previously-seen command auto-approved" "allow" "$out"
+
+# Legacy CLAUDE_PERMISSION_AUTO=1 still works when MODE not set
+rm -f "$LOG_FILE"
+out=$(run_hook "legacy-cmd" 1)
+assert_behavior "legacy AUTO=1: first-seen falls through" "" "$out"
+out=$(run_hook "legacy-cmd" 1)
+assert_behavior "legacy AUTO=1: second-seen auto-approved" "allow" "$out"
 
 echo "1..${TEST_NUM}"
 echo "# pass: ${PASS}"

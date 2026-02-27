@@ -73,21 +73,25 @@ echo "✓ Copied scripts to $HOOKS_DIR/"
 # 2. Choose which hook script to wire up
 case "$MODE" in
 --auto)
-	HOOK_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
+	HOOK_CMD="CLAUDE_PERMISSION_MODE=auto $HOOKS_DIR/log-permission-auto.sh"
 	echo "✓ Mode: auto-approve previously-seen rules"
 	;;
 --worktree)
-	HOOK_CMD="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
+	HOOK_CMD="CLAUDE_PERMISSION_MODE=worktree $HOOKS_DIR/log-permission-auto.sh"
 	echo "✓ Mode: auto-approve + sibling worktree rules"
 	;;
 *)
-	HOOK_CMD="$HOOKS_DIR/log-permission.sh"
+	HOOK_CMD="CLAUDE_PERMISSION_MODE=log $HOOKS_DIR/log-permission-auto.sh"
 	echo "✓ Mode: log-only (manual approval still required)"
 	;;
 esac
+# Managed command patterns: all legacy and new-style variants that install.sh owns
 MANAGED_LOG_CMD="$HOOKS_DIR/log-permission.sh"
+MANAGED_MODE_LOG_CMD="CLAUDE_PERMISSION_MODE=log $HOOKS_DIR/log-permission-auto.sh"
 MANAGED_AUTO_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
+MANAGED_MODE_AUTO_CMD="CLAUDE_PERMISSION_MODE=auto $HOOKS_DIR/log-permission-auto.sh"
 MANAGED_WORKTREE_CMD="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
+MANAGED_MODE_WORKTREE_CMD="CLAUDE_PERMISSION_MODE=worktree $HOOKS_DIR/log-permission-auto.sh"
 
 # 3. Merge hook config into settings.json
 if [[ ! -f $SETTINGS ]]; then
@@ -98,8 +102,11 @@ TEMP=$(mktemp)
 if ! jq \
 	--arg cmd "$HOOK_CMD" \
 	--arg managed_log "$MANAGED_LOG_CMD" \
+	--arg managed_mode_log "$MANAGED_MODE_LOG_CMD" \
 	--arg managed_auto "$MANAGED_AUTO_CMD" \
-	--arg managed_worktree "$MANAGED_WORKTREE_CMD" '
+	--arg managed_mode_auto "$MANAGED_MODE_AUTO_CMD" \
+	--arg managed_worktree "$MANAGED_WORKTREE_CMD" \
+	--arg managed_mode_worktree "$MANAGED_MODE_WORKTREE_CMD" '
     .hooks //= {} |
     .hooks.PermissionRequest //= [] |
     .hooks.PermissionRequest = (
@@ -109,7 +116,12 @@ if ! jq \
             (.hooks // [])
             | map(
                 select(
-                  (.command == $managed_log or .command == $managed_auto or .command == $managed_worktree)
+                  (.command == $managed_log
+                   or .command == $managed_mode_log
+                   or .command == $managed_auto
+                   or .command == $managed_mode_auto
+                   or .command == $managed_worktree
+                   or .command == $managed_mode_worktree)
                   | not
                 )
               )
