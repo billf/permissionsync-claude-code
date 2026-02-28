@@ -85,7 +85,7 @@ exit_code=$?
 assert_exit "non-user_settings source exits 0" "0" "$exit_code"
 
 log_lines=0
-[[ -f "$CHANGES_LOG" ]] && log_lines=$(wc -l <"$CHANGES_LOG" | tr -d ' ')
+[[ -f $CHANGES_LOG ]] && log_lines=$(wc -l <"$CHANGES_LOG" | tr -d ' ')
 assert_eq "non-user_settings source: no log entry" "0" "$log_lines"
 
 # --- Test 2: user_settings with intact hooks logs and exits 0 ---
