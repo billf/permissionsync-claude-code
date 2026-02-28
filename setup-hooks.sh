@@ -69,6 +69,8 @@ SCRIPTS=(
 	permissionsync-log-hook-errors.sh
 	permissionsync-watch-config.sh
 	permissionsync-sync-on-end.sh
+	session-start.sh
+	worktree-create.sh
 )
 
 changed=0
@@ -279,7 +281,65 @@ else
 	rm -f "$TEMP5"
 fi
 
-# 8. Seed baseline permissions (idempotent — skips if allow rules already exist)
+# 8. Wire SessionStart hook for drift notification (idempotent)
+SESSION_START_CMD="$HOOKS_DIR/session-start.sh"
+TEMP6=$(mktemp)
+if ! jq \
+	--arg cmd "$SESSION_START_CMD" '
+    .hooks //= {} |
+    .hooks.SessionStart //= [] |
+    .hooks.SessionStart = (
+      [
+        .hooks.SessionStart[]
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | select((.hooks | length) > 0)
+      ] + [{
+        hooks: [{type: "command", command: $cmd}]
+      }]
+    )
+  ' "$SETTINGS" >"$TEMP6"; then
+	echo "permissionsync-cc: ERROR: failed to wire SessionStart hook" >&2
+	rm -f "$TEMP6"
+	exit 1
+fi
+if ! cmp -s "$SETTINGS" "$TEMP6"; then
+	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+	mv "$TEMP6" "$SETTINGS"
+	changed=1
+else
+	rm -f "$TEMP6"
+fi
+
+# 9. Wire WorktreeCreate hook for settings seeding (idempotent)
+WORKTREE_CREATE_CMD="$HOOKS_DIR/worktree-create.sh"
+TEMP7=$(mktemp)
+if ! jq \
+	--arg cmd "$WORKTREE_CREATE_CMD" '
+    .hooks //= {} |
+    .hooks.WorktreeCreate //= [] |
+    .hooks.WorktreeCreate = (
+      [
+        .hooks.WorktreeCreate[]
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | select((.hooks | length) > 0)
+      ] + [{
+        hooks: [{type: "command", command: $cmd}]
+      }]
+    )
+  ' "$SETTINGS" >"$TEMP7"; then
+	echo "permissionsync-cc: ERROR: failed to wire WorktreeCreate hook" >&2
+	rm -f "$TEMP7"
+	exit 1
+fi
+if ! cmp -s "$SETTINGS" "$TEMP7"; then
+	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+	mv "$TEMP7" "$SETTINGS"
+	changed=1
+else
+	rm -f "$TEMP7"
+fi
+
+# 10. Seed baseline permissions (idempotent — skips if allow rules already exist)
 seed_baseline_permissions "$HOOKS_DIR" "$SETTINGS"
 
 # Report only when something changed

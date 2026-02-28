@@ -67,6 +67,8 @@ cp "$SCRIPT_DIR/permissionsync.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/permissionsync-log-hook-errors.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/permissionsync-watch-config.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/permissionsync-sync-on-end.sh" "$HOOKS_DIR/"
+cp "$SCRIPT_DIR/session-start.sh" "$HOOKS_DIR/"
+cp "$SCRIPT_DIR/worktree-create.sh" "$HOOKS_DIR/"
 chmod +x "$HOOKS_DIR/permissionsync-config.sh"
 chmod +x "$HOOKS_DIR/permissionsync-lib.sh"
 chmod +x "$HOOKS_DIR/log-permission.sh"
@@ -80,6 +82,8 @@ chmod +x "$HOOKS_DIR/permissionsync.sh"
 chmod +x "$HOOKS_DIR/permissionsync-log-hook-errors.sh"
 chmod +x "$HOOKS_DIR/permissionsync-watch-config.sh"
 chmod +x "$HOOKS_DIR/permissionsync-sync-on-end.sh"
+chmod +x "$HOOKS_DIR/session-start.sh"
+chmod +x "$HOOKS_DIR/worktree-create.sh"
 echo "✓ Copied scripts to $HOOKS_DIR/"
 
 # 2. Choose which hook script to wire up
@@ -279,7 +283,65 @@ else
 	rm -f "$TEMP5"
 fi
 
-# 8. Seed baseline permissions (skips if settings already has allow rules)
+# 8. Wire SessionStart hook for drift notification
+SESSION_START_CMD="$HOOKS_DIR/session-start.sh"
+TEMP6=$(mktemp)
+if ! jq \
+	--arg cmd "$SESSION_START_CMD" '
+    .hooks //= {} |
+    .hooks.SessionStart //= [] |
+    .hooks.SessionStart = (
+      [
+        .hooks.SessionStart[]
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | select((.hooks | length) > 0)
+      ] + [{
+        hooks: [{type: "command", command: $cmd}]
+      }]
+    )
+  ' "$SETTINGS" >"$TEMP6"; then
+	echo "ERROR: Failed to wire SessionStart hook in $SETTINGS"
+	rm -f "$TEMP6"
+	exit 1
+fi
+if ! cmp -s "$SETTINGS" "$TEMP6"; then
+	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+	mv "$TEMP6" "$SETTINGS"
+	echo "✓ Wired SessionStart hook (drift notification)"
+else
+	rm -f "$TEMP6"
+fi
+
+# 9. Wire WorktreeCreate hook for settings seeding
+WORKTREE_CREATE_CMD="$HOOKS_DIR/worktree-create.sh"
+TEMP7=$(mktemp)
+if ! jq \
+	--arg cmd "$WORKTREE_CREATE_CMD" '
+    .hooks //= {} |
+    .hooks.WorktreeCreate //= [] |
+    .hooks.WorktreeCreate = (
+      [
+        .hooks.WorktreeCreate[]
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | select((.hooks | length) > 0)
+      ] + [{
+        hooks: [{type: "command", command: $cmd}]
+      }]
+    )
+  ' "$SETTINGS" >"$TEMP7"; then
+	echo "ERROR: Failed to wire WorktreeCreate hook in $SETTINGS"
+	rm -f "$TEMP7"
+	exit 1
+fi
+if ! cmp -s "$SETTINGS" "$TEMP7"; then
+	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+	mv "$TEMP7" "$SETTINGS"
+	echo "✓ Wired WorktreeCreate hook (settings seeding)"
+else
+	rm -f "$TEMP7"
+fi
+
+# 10. Seed baseline permissions (skips if settings already has allow rules)
 seed_baseline_permissions "$HOOKS_DIR" "$SETTINGS"
 
 echo ""

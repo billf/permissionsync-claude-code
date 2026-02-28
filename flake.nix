@@ -27,6 +27,8 @@
         "permissionsync-log-hook-errors.sh"
         "permissionsync-watch-config.sh"
         "permissionsync-sync-on-end.sh"
+        "session-start.sh"
+        "worktree-create.sh"
         "setup-hooks.sh"
       ];
 
