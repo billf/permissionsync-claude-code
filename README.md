@@ -8,11 +8,13 @@ Every time you open Claude Code in a new worktree, repo, or session, you re-appr
 
 ## The Solution
 
-A `PermissionRequest` hook that:
+Five hooks that together:
 
-1. **Logs every permission request** to a single JSONL file (`~/.claude/permission-approvals.jsonl`)
-2. **Deduplicates and syncs** those approvals into your global `~/.claude/settings.json` on demand
-3. **(Optional)** Auto-approves rules you've previously seen — including rules discovered from sibling git worktrees — eliminating repeat prompts entirely
+1. **Log every permission request** to a single JSONL file (`~/.claude/permission-approvals.jsonl`)
+2. **Record confirmed approvals** separately in `confirmed-approvals.jsonl` (tools that actually executed)
+3. **Capture tool failures** in `hook-errors.jsonl` for a complete audit trilogy
+4. **Auto-sync rules** on session exit — no manual `sync --apply` needed
+5. **(Optional)** Auto-approve rules you've previously seen, including sibling worktree rules
 
 ## Requirements
 
@@ -73,6 +75,9 @@ git clone https://github.com/billf/permissionsync-claude-code.git && cd permissi
 |------|---------|
 | `~/.claude/hooks/log-permission-auto.sh` | `PermissionRequest` hook — logs requests, optionally auto-approves |
 | `~/.claude/hooks/log-confirmed.sh` | `PostToolUse` hook — logs confirmed (approved + executed) operations |
+| `~/.claude/hooks/permissionsync-log-hook-errors.sh` | `PostToolUseFailure` hook — logs failed tool executions |
+| `~/.claude/hooks/permissionsync-watch-config.sh` | `ConfigChange` hook — warns when permissionsync hooks are removed from settings |
+| `~/.claude/hooks/permissionsync-sync-on-end.sh` | `SessionEnd` hook — auto-runs `sync --apply` on session exit |
 | `~/.claude/hooks/sync-permissions.sh` | Merges JSONL log into `~/.claude/settings.json` |
 | `~/.claude/hooks/worktree-sync.sh` | Aggregates and syncs permission rules across git worktrees |
 | `~/.claude/hooks/merged-settings.sh` | Outputs merged permissions JSON for `claude --settings` |
@@ -81,7 +86,7 @@ git clone https://github.com/billf/permissionsync-claude-code.git && cd permissi
 | `~/.claude/hooks/permissionsync-config.sh` | Data definitions: safe subcommands, indirection types, blocklists |
 | `~/.claude/hooks/permissionsync-lib.sh` | Core library: rule building, indirection peeling, worktree discovery |
 
-The installer adds both a `PermissionRequest` hook and a `PostToolUse` hook to `~/.claude/settings.json`:
+The installer wires five hooks into `~/.claude/settings.json`:
 
 ```json
 {
@@ -96,6 +101,24 @@ The installer adds both a `PermissionRequest` hook and a `PostToolUse` hook to `
       {
         "matcher": "*",
         "hooks": [{"type": "command", "command": "~/.claude/hooks/log-confirmed.sh"}]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [{"type": "command", "command": "~/.claude/hooks/permissionsync-log-hook-errors.sh"}]
+      }
+    ],
+    "ConfigChange": [
+      {
+        "matcher": "user_settings",
+        "hooks": [{"type": "command", "command": "~/.claude/hooks/permissionsync-watch-config.sh"}]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [{"type": "command", "command": "~/.claude/hooks/permissionsync-sync-on-end.sh"}]
       }
     ]
   }
@@ -115,6 +138,34 @@ Just use Claude Code normally. Every time you see a permission prompt and approv
 ```
 
 A second log, `~/.claude/confirmed-approvals.jsonl`, is written by the `PostToolUse` hook. Unlike the request log (which captures all prompts including denied ones), the confirmed log only records tools that actually executed — giving a clean record of truly approved operations. Use `--from-confirmed` with `sync-permissions.sh` to sync only from confirmed approvals.
+
+### Audit Trilogy & Lifecycle Hooks
+
+Three complementary logs build a complete audit trail of every tool interaction:
+
+| Log file | Written by | What it captures |
+|----------|-----------|-----------------|
+| `~/.claude/permission-approvals.jsonl` | `PermissionRequest` hook | Every tool prompt — approved and denied |
+| `~/.claude/confirmed-approvals.jsonl` | `PostToolUse` hook | Tools that executed successfully (clean approved signal) |
+| `~/.claude/hook-errors.jsonl` | `PostToolUseFailure` hook | Tools that failed — tool name, rule, error code, error message |
+
+Together these give you *requested*, *approved*, and *failed* in three separate streams, each queryable with `jq`.
+
+Two additional lifecycle hooks run automatically:
+
+**`ConfigChange` → `~/.claude/config-changes.jsonl`**
+
+Fires whenever `~/.claude/settings.json` is written. Checks whether permissionsync's hooks are still present and logs the result:
+
+```json
+{"timestamp":"...","source":"user_settings","file_path":"~/.claude/settings.json","hooks_intact":true}
+```
+
+If the hooks were removed, prints a warning to stderr and logs `hooks_intact: false`. Re-run `install.sh` to restore them.
+
+**`SessionEnd` → auto-sync**
+
+When a session ends, `permissionsync-sync-on-end.sh` automatically runs `sync-permissions.sh --apply`. Rules accumulated during the session are promoted to `~/.claude/settings.json` without any manual step. The next session starts with those rules already present.
 
 ### Phase 2: Review & sync (on demand)
 
