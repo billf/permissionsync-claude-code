@@ -66,6 +66,9 @@ SCRIPTS=(
 	merged-settings.sh
 	permissionsync-launch.sh
 	permissionsync.sh
+	permissionsync-log-hook-errors.sh
+	permissionsync-watch-config.sh
+	permissionsync-sync-on-end.sh
 )
 
 changed=0
@@ -186,10 +189,100 @@ else
 	rm -f "$TEMP2"
 fi
 
-# 5. Seed baseline permissions (idempotent — skips if allow rules already exist)
+# 5. Wire PostToolUseFailure hook for hook-errors log (idempotent)
+ERRORS_CMD="$HOOKS_DIR/permissionsync-log-hook-errors.sh"
+TEMP3=$(mktemp)
+if ! jq \
+	--arg cmd "$ERRORS_CMD" '
+    .hooks //= {} |
+    .hooks.PostToolUseFailure //= [] |
+    .hooks.PostToolUseFailure = (
+      [
+        .hooks.PostToolUseFailure[]
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | select((.hooks | length) > 0)
+      ] + [{
+        matcher: "*",
+        hooks: [{type: "command", command: $cmd}]
+      }]
+    )
+  ' "$SETTINGS" >"$TEMP3"; then
+	echo "permissionsync-cc: ERROR: failed to wire PostToolUseFailure hook" >&2
+	rm -f "$TEMP3"
+	exit 1
+fi
+if ! cmp -s "$SETTINGS" "$TEMP3"; then
+	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+	mv "$TEMP3" "$SETTINGS"
+	changed=1
+else
+	rm -f "$TEMP3"
+fi
+
+# 6. Wire ConfigChange hook for config-changes log (idempotent)
+WATCH_CMD="$HOOKS_DIR/permissionsync-watch-config.sh"
+TEMP4=$(mktemp)
+if ! jq \
+	--arg cmd "$WATCH_CMD" '
+    .hooks //= {} |
+    .hooks.ConfigChange //= [] |
+    .hooks.ConfigChange = (
+      [
+        .hooks.ConfigChange[]
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | select((.hooks | length) > 0)
+      ] + [{
+        matcher: "user_settings",
+        hooks: [{type: "command", command: $cmd}]
+      }]
+    )
+  ' "$SETTINGS" >"$TEMP4"; then
+	echo "permissionsync-cc: ERROR: failed to wire ConfigChange hook" >&2
+	rm -f "$TEMP4"
+	exit 1
+fi
+if ! cmp -s "$SETTINGS" "$TEMP4"; then
+	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+	mv "$TEMP4" "$SETTINGS"
+	changed=1
+else
+	rm -f "$TEMP4"
+fi
+
+# 7. Wire SessionEnd hook for auto-sync (idempotent)
+SYNCEND_CMD="$HOOKS_DIR/permissionsync-sync-on-end.sh"
+TEMP5=$(mktemp)
+if ! jq \
+	--arg cmd "$SYNCEND_CMD" '
+    .hooks //= {} |
+    .hooks.SessionEnd //= [] |
+    .hooks.SessionEnd = (
+      [
+        .hooks.SessionEnd[]
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | select((.hooks | length) > 0)
+      ] + [{
+        matcher: "*",
+        hooks: [{type: "command", command: $cmd}]
+      }]
+    )
+  ' "$SETTINGS" >"$TEMP5"; then
+	echo "permissionsync-cc: ERROR: failed to wire SessionEnd hook" >&2
+	rm -f "$TEMP5"
+	exit 1
+fi
+if ! cmp -s "$SETTINGS" "$TEMP5"; then
+	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+	mv "$TEMP5" "$SETTINGS"
+	changed=1
+else
+	rm -f "$TEMP5"
+fi
+
+# 8. Seed baseline permissions (idempotent — skips if allow rules already exist)
 seed_baseline_permissions "$HOOKS_DIR" "$SETTINGS"
 
-# 5. Report only when something changed
+# Report only when something changed
 if [[ $changed -eq 1 ]]; then
 	echo "permissionsync-cc: hooks installed ($MODE mode)"
 fi

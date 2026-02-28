@@ -101,19 +101,37 @@ assert_eq "user_settings intact hooks: one log entry" "1" "$log_lines"
 hooks_intact=$(jq -r '.hooks_intact' "$CHANGES_LOG")
 assert_eq "log entry has hooks_intact=true" "true" "$hooks_intact"
 
-# --- Test 3: user_settings with missing PermissionRequest hook exits 2 ---
+# --- Test 3: user_settings with missing PermissionRequest hook exits 0 with stderr warning ---
 set +e
-run_hook "user_settings" "$MISSING_PERMREQ" 2>/dev/null
+stderr_out=$(run_hook "user_settings" "$MISSING_PERMREQ" 2>&1 >/dev/null)
 exit_code=$?
 set -e
-assert_exit "missing PermissionRequest hook exits 2" "2" "$exit_code"
+assert_exit "missing PermissionRequest hook exits 0 (warn-only)" "0" "$exit_code"
 
-# --- Test 4: user_settings with missing PostToolUse hook exits 2 ---
+TEST_NUM=$((TEST_NUM + 1))
+if echo "$stderr_out" | grep -q "WARNING"; then
+	echo "ok ${TEST_NUM} - missing PermissionRequest hook prints WARNING to stderr"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - missing PermissionRequest hook should print WARNING to stderr, got: '$stderr_out'"
+	FAIL=$((FAIL + 1))
+fi
+
+# --- Test 4: user_settings with missing PostToolUse hook exits 0 with stderr warning ---
 set +e
-run_hook "user_settings" "$MISSING_POSTUSE" 2>/dev/null
+stderr_out=$(run_hook "user_settings" "$MISSING_POSTUSE" 2>&1 >/dev/null)
 exit_code=$?
 set -e
-assert_exit "missing PostToolUse hook exits 2" "2" "$exit_code"
+assert_exit "missing PostToolUse hook exits 0 (warn-only)" "0" "$exit_code"
+
+TEST_NUM=$((TEST_NUM + 1))
+if echo "$stderr_out" | grep -q "WARNING"; then
+	echo "ok ${TEST_NUM} - missing PostToolUse hook prints WARNING to stderr"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - missing PostToolUse hook should print WARNING to stderr, got: '$stderr_out'"
+	FAIL=$((FAIL + 1))
+fi
 
 # --- Test 5: Log record has expected fields ---
 log_source=$(jq -r 'select(.hooks_intact == true) | .source' "$CHANGES_LOG")

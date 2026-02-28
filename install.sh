@@ -64,6 +64,9 @@ cp "$SCRIPT_DIR/worktree-sync.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/merged-settings.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/permissionsync-launch.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/permissionsync.sh" "$HOOKS_DIR/"
+cp "$SCRIPT_DIR/permissionsync-log-hook-errors.sh" "$HOOKS_DIR/"
+cp "$SCRIPT_DIR/permissionsync-watch-config.sh" "$HOOKS_DIR/"
+cp "$SCRIPT_DIR/permissionsync-sync-on-end.sh" "$HOOKS_DIR/"
 chmod +x "$HOOKS_DIR/permissionsync-config.sh"
 chmod +x "$HOOKS_DIR/permissionsync-lib.sh"
 chmod +x "$HOOKS_DIR/log-permission.sh"
@@ -74,6 +77,9 @@ chmod +x "$HOOKS_DIR/worktree-sync.sh"
 chmod +x "$HOOKS_DIR/merged-settings.sh"
 chmod +x "$HOOKS_DIR/permissionsync-launch.sh"
 chmod +x "$HOOKS_DIR/permissionsync.sh"
+chmod +x "$HOOKS_DIR/permissionsync-log-hook-errors.sh"
+chmod +x "$HOOKS_DIR/permissionsync-watch-config.sh"
+chmod +x "$HOOKS_DIR/permissionsync-sync-on-end.sh"
 echo "✓ Copied scripts to $HOOKS_DIR/"
 
 # 2. Choose which hook script to wire up
@@ -183,7 +189,97 @@ else
 	rm -f "$TEMP2"
 fi
 
-# 5. Seed baseline permissions (skips if settings already has allow rules)
+# 5. Wire PostToolUseFailure hook for hook-errors log
+ERRORS_CMD="$HOOKS_DIR/permissionsync-log-hook-errors.sh"
+TEMP3=$(mktemp)
+if ! jq \
+	--arg cmd "$ERRORS_CMD" '
+    .hooks //= {} |
+    .hooks.PostToolUseFailure //= [] |
+    .hooks.PostToolUseFailure = (
+      [
+        .hooks.PostToolUseFailure[]
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | select((.hooks | length) > 0)
+      ] + [{
+        matcher: "*",
+        hooks: [{type: "command", command: $cmd}]
+      }]
+    )
+  ' "$SETTINGS" >"$TEMP3"; then
+	echo "ERROR: Failed to wire PostToolUseFailure hook in $SETTINGS"
+	rm -f "$TEMP3"
+	exit 1
+fi
+if ! cmp -s "$SETTINGS" "$TEMP3"; then
+	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+	mv "$TEMP3" "$SETTINGS"
+	echo "✓ Wired PostToolUseFailure hook (hook-errors log)"
+else
+	rm -f "$TEMP3"
+fi
+
+# 6. Wire ConfigChange hook for config-changes log
+WATCH_CMD="$HOOKS_DIR/permissionsync-watch-config.sh"
+TEMP4=$(mktemp)
+if ! jq \
+	--arg cmd "$WATCH_CMD" '
+    .hooks //= {} |
+    .hooks.ConfigChange //= [] |
+    .hooks.ConfigChange = (
+      [
+        .hooks.ConfigChange[]
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | select((.hooks | length) > 0)
+      ] + [{
+        matcher: "user_settings",
+        hooks: [{type: "command", command: $cmd}]
+      }]
+    )
+  ' "$SETTINGS" >"$TEMP4"; then
+	echo "ERROR: Failed to wire ConfigChange hook in $SETTINGS"
+	rm -f "$TEMP4"
+	exit 1
+fi
+if ! cmp -s "$SETTINGS" "$TEMP4"; then
+	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+	mv "$TEMP4" "$SETTINGS"
+	echo "✓ Wired ConfigChange hook (config-changes log)"
+else
+	rm -f "$TEMP4"
+fi
+
+# 7. Wire SessionEnd hook for auto-sync
+SYNCEND_CMD="$HOOKS_DIR/permissionsync-sync-on-end.sh"
+TEMP5=$(mktemp)
+if ! jq \
+	--arg cmd "$SYNCEND_CMD" '
+    .hooks //= {} |
+    .hooks.SessionEnd //= [] |
+    .hooks.SessionEnd = (
+      [
+        .hooks.SessionEnd[]
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | select((.hooks | length) > 0)
+      ] + [{
+        matcher: "*",
+        hooks: [{type: "command", command: $cmd}]
+      }]
+    )
+  ' "$SETTINGS" >"$TEMP5"; then
+	echo "ERROR: Failed to wire SessionEnd hook in $SETTINGS"
+	rm -f "$TEMP5"
+	exit 1
+fi
+if ! cmp -s "$SETTINGS" "$TEMP5"; then
+	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+	mv "$TEMP5" "$SETTINGS"
+	echo "✓ Wired SessionEnd hook (auto-sync on exit)"
+else
+	rm -f "$TEMP5"
+fi
+
+# 8. Seed baseline permissions (skips if settings already has allow rules)
 seed_baseline_permissions "$HOOKS_DIR" "$SETTINGS"
 
 echo ""

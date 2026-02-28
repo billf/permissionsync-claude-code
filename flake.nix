@@ -24,6 +24,9 @@
         "merged-settings.sh"
         "permissionsync-launch.sh"
         "permissionsync.sh"
+        "permissionsync-log-hook-errors.sh"
+        "permissionsync-watch-config.sh"
+        "permissionsync-sync-on-end.sh"
         "setup-hooks.sh"
       ];
 
