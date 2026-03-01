@@ -70,7 +70,26 @@ if [[ $AUTO_MODE == "1" ]] && [[ -f $LOG_FILE ]]; then
 	fi
 fi
 
-# --- Log the request ---
+# --- Determine auto-approval decision before logging ---
+AUTO_APPROVED="false"
+
+# Safe subcommand auto-approve: allow known read-only operations
+if [[ $IS_SAFE == "true" ]]; then
+	AUTO_APPROVED="true"
+
+# Sibling worktree auto-approve
+elif [[ $WORKTREE_MODE == "1" ]] && is_in_worktree; then
+	if read_sibling_rules && echo "$SIBLING_RULES" | grep -qxF "$RULE"; then
+		AUTO_APPROVED="true"
+	fi
+fi
+
+# Auto-approve mode: if this rule was previously seen, allow it
+if [[ $AUTO_APPROVED == "false" ]] && [[ $AUTO_MODE == "1" ]] && [[ $SEEN_BEFORE -eq 1 ]]; then
+	AUTO_APPROVED="true"
+fi
+
+# --- Log the request with the decision ---
 mkdir -p "$(dirname "$LOG_FILE")"
 jq -nc \
 	--arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -79,12 +98,13 @@ jq -nc \
 	--arg base_command "${BASE_COMMAND}" \
 	--arg indirection_chain "${INDIRECTION_CHAIN}" \
 	--arg is_safe "${IS_SAFE}" \
+	--arg auto_approved "$AUTO_APPROVED" \
 	--arg cwd "$CWD" \
-	'{timestamp: $ts, tool: $tool, rule: $rule, base_command: $base_command, indirection_chain: $indirection_chain, is_safe: $is_safe, cwd: $cwd}' \
+	'{timestamp: $ts, tool: $tool, rule: $rule, base_command: $base_command, indirection_chain: $indirection_chain, is_safe: $is_safe, auto_approved: $auto_approved, cwd: $cwd}' \
 	>>"$LOG_FILE"
 
-# --- Safe subcommand auto-approve: allow known read-only operations ---
-if [[ $IS_SAFE == "true" ]]; then
+# --- Emit allow decision if auto-approved ---
+if [[ $AUTO_APPROVED == "true" ]]; then
 	jq -nc '{
       "hookSpecificOutput": {
         "hookEventName": "PermissionRequest",
@@ -93,41 +113,5 @@ if [[ $IS_SAFE == "true" ]]; then
         }
       }
     }'
-	exit 0
 fi
-
-# --- Sibling worktree auto-approve ---
-if [[ $WORKTREE_MODE == "1" ]]; then
-	if is_in_worktree; then
-		if read_sibling_rules; then
-			if echo "$SIBLING_RULES" | grep -qxF "$RULE"; then
-				jq -nc '{
-              "hookSpecificOutput": {
-                "hookEventName": "PermissionRequest",
-                "decision": {
-                  "behavior": "allow"
-                }
-              }
-            }'
-				exit 0
-			fi
-		fi
-	fi
-fi
-
-# --- Auto-approve mode: if this rule was previously approved, allow it ---
-if [[ $AUTO_MODE == "1" ]] && [[ $SEEN_BEFORE -eq 1 ]]; then
-	# We've seen and (presumably) approved this before — auto-allow
-	jq -nc '{
-      "hookSpecificOutput": {
-        "hookEventName": "PermissionRequest",
-        "decision": {
-          "behavior": "allow"
-        }
-      }
-    }'
-	exit 0
-fi
-
-# --- Default: fall through to interactive prompt ---
 exit 0

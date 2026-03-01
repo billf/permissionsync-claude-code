@@ -72,6 +72,26 @@ assert_log_lines() {
 	fi
 }
 
+assert_log_field() {
+	local desc="$1" line="$2" field="$3" expected="$4"
+	TEST_NUM=$((TEST_NUM + 1))
+
+	local actual=""
+	if [[ -f $LOG_FILE ]]; then
+		actual=$(sed -n "${line}p" "$LOG_FILE" | jq -r ".$field // empty")
+	fi
+
+	if [[ $actual == "$expected" ]]; then
+		echo "ok ${TEST_NUM} - ${desc}"
+		PASS=$((PASS + 1))
+	else
+		echo "not ok ${TEST_NUM} - ${desc}"
+		echo "#   expected $field: '${expected}'"
+		echo "#   got $field:      '${actual}'"
+		FAIL=$((FAIL + 1))
+	fi
+}
+
 echo "TAP version 13"
 
 # First-seen unsafe command must NOT auto-approve.
@@ -127,6 +147,26 @@ out=$(run_hook "legacy-cmd" 1)
 assert_behavior "legacy AUTO=1: first-seen falls through" "" "$out"
 out=$(run_hook "legacy-cmd" 1)
 assert_behavior "legacy AUTO=1: second-seen auto-approved" "allow" "$out"
+
+# --- auto_approved field in log entries ---
+rm -f "$LOG_FILE"
+
+# Deferred (first-seen unsafe): auto_approved=false
+run_hook "git push origin main" 1 >/dev/null
+assert_log_field "first-seen unsafe: auto_approved=false in log" "1" "auto_approved" "false"
+
+# Auto-approved (second-seen): auto_approved=true
+run_hook "git push origin main" 1 >/dev/null
+assert_log_field "previously-seen unsafe: auto_approved=true in log" "2" "auto_approved" "true"
+
+# Safe subcommand: auto_approved=true
+run_hook "git status --short" 1 >/dev/null
+assert_log_field "safe subcommand: auto_approved=true in log" "3" "auto_approved" "true"
+
+# Mode=log, unsafe: auto_approved=false
+rm -f "$LOG_FILE"
+run_hook_mode "some-cmd" "log" >/dev/null
+assert_log_field "MODE=log unsafe: auto_approved=false in log" "1" "auto_approved" "false"
 
 echo "1..${TEST_NUM}"
 echo "# pass: ${PASS}"

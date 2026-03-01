@@ -35,9 +35,9 @@ for arg in "$@"; do
 	--apply) APPLY=1 ;;
 	--init-base) INIT_BASE=1 ;;
 	--from-confirmed) FROM_CONFIRMED=1 ;;
-	--preview | --print | --diff) MODE="$arg" ;;
+	--preview | --print | --diff | --stats) MODE="$arg" ;;
 	*)
-		echo "Usage: $0 [--preview|--apply|--print|--diff|--refine|--init-base|--from-confirmed] [--apply]"
+		echo "Usage: $0 [--preview|--apply|--print|--diff|--stats|--refine|--init-base|--from-confirmed] [--apply]"
 		exit 1
 		;;
 	esac
@@ -391,8 +391,46 @@ else
 		diff <(echo "$CURRENT" | jq '.[]' | sort) <(echo "$PROPOSED" | jq '.[]' | sort) || true
 		;;
 
+	--stats)
+		jq -s '
+          def pct(n; total): if total == 0 then "n/a" else ((n * 100 / total) | floor | tostring) + "%" end;
+          {
+            total: length,
+            auto_approved: ([.[] | select(.auto_approved == "true")] | length),
+            deferred:      ([.[] | select(.auto_approved == "false")] | length),
+            unknown:       ([.[] | select(.auto_approved == null)] | length),
+            is_safe_true:  ([.[] | select(.is_safe == "true")] | length),
+            by_tool: (group_by(.tool) | map({key: .[0].tool, value: length}) | from_entries | to_entries | sort_by(-.value) | from_entries),
+            top_bash_commands: (
+              [.[] | select(.tool == "Bash" and (.base_command // "") != "")]
+              | group_by(.base_command)
+              | map({key: .[0].base_command, value: length})
+              | sort_by(-.value)
+              | .[0:10]
+              | from_entries
+            )
+          }
+        ' "$LOG_FILE" |
+			jq -r '
+          "=== permissionsync stats ===",
+          "Log: '"$LOG_FILE"'",
+          "",
+          "Total requests logged:  \(.total)",
+          "  auto_approved=true:   \(.auto_approved) (\(if .total > 0 then (.auto_approved * 100 / .total | floor) else 0 end)%)",
+          "  auto_approved=false:  \(.deferred) (\(if .total > 0 then (.deferred * 100 / .total | floor) else 0 end)%)",
+          (if .unknown > 0 then "  auto_approved=unknown: \(.unknown) (pre-v2 entries)" else empty end),
+          "  is_safe=true:         \(.is_safe_true)",
+          "",
+          "By tool:",
+          (.by_tool | to_entries[] | "  \(.key): \(.value)"),
+          "",
+          "Top Bash base_commands:",
+          (.top_bash_commands | to_entries[] | "  \(.key): \(.value)")
+        '
+		;;
+
 	*)
-		echo "Usage: $0 [--preview|--apply|--print|--diff|--refine] [--apply]"
+		echo "Usage: $0 [--preview|--apply|--print|--diff|--stats|--refine] [--apply]"
 		exit 1
 		;;
 	esac
