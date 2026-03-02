@@ -64,6 +64,13 @@ assert_eq "error field populated" "permission_denied" "$error"
 error_msg=$(jq -r '.error_message' "$ERRORS_LOG")
 assert_eq "error_message field populated" "User denied this operation" "$error_msg"
 
+# --- Test 3b: is_safe and indirection_chain fields present ---
+is_safe=$(jq -r '.is_safe' "$ERRORS_LOG")
+assert_eq "is_safe field present (non-empty)" "1" "$([ -n "$is_safe" ] && echo 1 || echo 0)"
+
+indirection_chain=$(jq -r '.indirection_chain' "$ERRORS_LOG")
+assert_eq "indirection_chain field present (non-null)" "1" "$([ "$indirection_chain" != "null" ] && echo 1 || echo 0)"
+
 # --- Test 4: Empty tool_name guard exits 0 without writing ---
 lines_before=$(wc -l <"$ERRORS_LOG" | tr -d ' ')
 empty_input='{"tool_name":"","tool_input":{},"error":"","error_message":"","cwd":"/tmp","session_id":""}'

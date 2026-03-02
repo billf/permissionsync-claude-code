@@ -20,9 +20,11 @@ jq -nc \
 	--arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 	--arg tool "$TOOL_NAME" --arg rule "$RULE" \
 	--arg base_command "${BASE_COMMAND}" \
+	--arg indirection_chain "${INDIRECTION_CHAIN}" \
+	--arg is_safe "${IS_SAFE}" \
 	--arg error "$ERROR" --arg error_message "$ERROR_MSG" \
 	--arg cwd "$CWD" --arg session "$SESSION_ID" \
-	'{timestamp:$ts, tool:$tool, rule:$rule, base_command:$base_command, error:$error, error_message:$error_message, cwd:$cwd, session_id:$session}' \
+	'{timestamp:$ts, tool:$tool, rule:$rule, base_command:$base_command, indirection_chain:$indirection_chain, is_safe:$is_safe, error:$error, error_message:$error_message, cwd:$cwd, session_id:$session}' \
 	>>"$ERRORS_LOG"
 # Always exit 0 — PostToolUseFailure cannot block
 exit 0
