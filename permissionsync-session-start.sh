@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Drain stdin (Claude Code pipes hook input; we don't use it)
 true </dev/stdin
 
-SYNC="${SCRIPT_DIR}/sync-permissions.sh"
+SYNC="${SCRIPT_DIR}/permissionsync-sync.sh"
 if [[ ! -x $SYNC ]]; then
 	exit 0
 fi
@@ -17,8 +17,8 @@ OUTPUT=$("$SYNC" --diff 2>/dev/null) || true
 NEW_COUNT=$(echo "$OUTPUT" | grep -c '^>' 2>/dev/null) || true
 if [[ ${NEW_COUNT:-0} -gt 0 ]]; then
 	echo "== permissionsync: ${NEW_COUNT} new rule(s) in approval log =="
-	echo "Apply:  ${SCRIPT_DIR}/sync-permissions.sh --apply"
-	echo "Refine: ${SCRIPT_DIR}/sync-permissions.sh --refine --apply"
+	echo "Apply:  ${SCRIPT_DIR}/permissionsync-sync.sh --apply"
+	echo "Refine: ${SCRIPT_DIR}/permissionsync-sync.sh --refine --apply"
 	echo ""
 	echo "$OUTPUT"
 fi
