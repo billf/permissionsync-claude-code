@@ -19,9 +19,14 @@ fi
 # Guard: check that our hooks are still present
 has_permreq=$(jq -r '[.hooks.PermissionRequest[]?.hooks[]?.command // ""] | map(select(test("/.claude/hooks/"))) | length' "$SETTINGS_PATH" 2>/dev/null || echo 0)
 has_postuse=$(jq -r '[.hooks.PostToolUse[]?.hooks[]?.command // ""] | map(select(test("/.claude/hooks/"))) | length' "$SETTINGS_PATH" 2>/dev/null || echo 0)
+has_posttooluse_fail=$(jq -r '[.hooks.PostToolUseFailure[]?.hooks[]?.command // ""] | map(select(test("/.claude/hooks/"))) | length' "$SETTINGS_PATH" 2>/dev/null || echo 0)
+has_configchange=$(jq -r '[.hooks.ConfigChange[]?.hooks[]?.command // ""] | map(select(test("/.claude/hooks/"))) | length' "$SETTINGS_PATH" 2>/dev/null || echo 0)
+has_sessionend=$(jq -r '[.hooks.SessionEnd[]?.hooks[]?.command // ""] | map(select(test("/.claude/hooks/"))) | length' "$SETTINGS_PATH" 2>/dev/null || echo 0)
 
 HOOKS_INTACT=true
-if [[ $has_permreq -eq 0 ]] || [[ $has_postuse -eq 0 ]]; then
+if [[ $has_permreq -eq 0 ]] || [[ $has_postuse -eq 0 ]] || \
+	[[ $has_posttooluse_fail -eq 0 ]] || [[ $has_configchange -eq 0 ]] || \
+	[[ $has_sessionend -eq 0 ]]; then
 	HOOKS_INTACT=false
 fi
 
