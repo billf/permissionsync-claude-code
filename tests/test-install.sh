@@ -27,6 +27,20 @@ assert_eq() {
 	fi
 }
 
+assert_contains() {
+	local desc="$1" pattern="$2" actual="$3"
+	TEST_NUM=$((TEST_NUM + 1))
+	if echo "$actual" | grep -qF -- "$pattern"; then
+		echo "ok ${TEST_NUM} - ${desc}"
+		PASS=$((PASS + 1))
+	else
+		echo "not ok ${TEST_NUM} - ${desc}"
+		echo "#   expected to contain: '${pattern}'"
+		echo "#   actual:              '${actual}'"
+		FAIL=$((FAIL + 1))
+	fi
+}
+
 reset_home() {
 	rm -rf "$TEST_HOME"
 	TEST_HOME="$(mktemp -d)"
@@ -56,6 +70,25 @@ assert_eq "log mode installs one hook entry" "1" "$count"
 cmd=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
 	"$TEST_HOME/.claude/settings.json")
 assert_eq "log mode uses CLAUDE_PERMISSION_MODE=log permissionsync-log-permission.sh" "$expected_log" "$cmd"
+
+# --- Test 1b: log mode installs all 6 secondary hooks ---
+ptu_cmd=$(jq -r '.hooks.PostToolUse[0].hooks[0].command' "$TEST_HOME/.claude/settings.json")
+assert_contains "log mode wires PostToolUse (log-confirmed)" "permissionsync-log-confirmed.sh" "$ptu_cmd"
+
+ptuf_cmd=$(jq -r '.hooks.PostToolUseFailure[0].hooks[0].command' "$TEST_HOME/.claude/settings.json")
+assert_contains "log mode wires PostToolUseFailure (log-hook-errors)" "permissionsync-log-hook-errors.sh" "$ptuf_cmd"
+
+cc_cmd=$(jq -r '.hooks.ConfigChange[0].hooks[0].command' "$TEST_HOME/.claude/settings.json")
+assert_contains "log mode wires ConfigChange (watch-config)" "permissionsync-watch-config.sh" "$cc_cmd"
+
+se_cmd=$(jq -r '.hooks.SessionEnd[0].hooks[0].command' "$TEST_HOME/.claude/settings.json")
+assert_contains "log mode wires SessionEnd (sync-on-end)" "permissionsync-sync-on-end.sh" "$se_cmd"
+
+ss_cmd=$(jq -r '.hooks.SessionStart[0].hooks[0].command' "$TEST_HOME/.claude/settings.json")
+assert_contains "log mode wires SessionStart (session-start)" "permissionsync-session-start.sh" "$ss_cmd"
+
+wc_cmd=$(jq -r '.hooks.WorktreeCreate[0].hooks[0].command' "$TEST_HOME/.claude/settings.json")
+assert_contains "log mode wires WorktreeCreate (worktree-create)" "permissionsync-worktree-create.sh" "$wc_cmd"
 
 # --- Test 2: mode switch log->auto keeps one entry and updates command ---
 run_install --auto
