@@ -42,7 +42,9 @@ wire_hook() {
 		exit 1
 	fi
 	if ! cmp -s "$SETTINGS" "$tmp"; then
-		cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+		if [[ ! -f "${SETTINGS}.bak" ]]; then
+			cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
+		fi
 		mv "$tmp" "$SETTINGS"
 		return 0
 	fi
