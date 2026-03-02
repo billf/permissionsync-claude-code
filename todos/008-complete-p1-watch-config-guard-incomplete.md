@@ -1,5 +1,5 @@
 ---
-status: ready
+status: complete
 priority: p1
 issue_id: "008"
 tags: [watch-config, guard, hooks, config-change]

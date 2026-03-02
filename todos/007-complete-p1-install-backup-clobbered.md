@@ -1,5 +1,5 @@
 ---
-status: ready
+status: complete
 priority: p1
 issue_id: "007"
 tags: [install, backup, data-loss, settings]

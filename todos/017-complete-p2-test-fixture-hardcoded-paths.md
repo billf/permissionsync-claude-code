@@ -1,5 +1,5 @@
 ---
-status: ready
+status: complete
 priority: p2
 issue_id: "017"
 tags: [tests, fixtures, paths, portability]

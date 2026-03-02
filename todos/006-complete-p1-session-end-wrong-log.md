@@ -1,5 +1,5 @@
 ---
-status: ready
+status: complete
 priority: p1
 issue_id: "006"
 tags: [security, session-end, sync, data-integrity]
