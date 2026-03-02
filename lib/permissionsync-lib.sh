@@ -681,6 +681,9 @@ build_rule_v2() {
 		local url domain
 		url=$(jq -r '.url // empty' <<<"$input")
 		if [[ -n $url ]]; then
+			# Normalize URL: strip embedded newlines/CRs (injection prevention)
+			url="${url%%$'\n'*}"
+			url="${url%%$'\r'*}"
 			# Extract domain using Bash parameter expansion (no subprocess)
 			domain="${url#*://}"
 			domain="${domain%%/*}"

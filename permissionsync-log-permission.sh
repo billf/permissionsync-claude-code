@@ -78,6 +78,15 @@ eval "$(jq -r '@sh "TOOL_NAME=\(.tool_name // "") TOOL_INPUT=\(.tool_input // {}
 # --- Build the permission rule using the shared library ---
 build_rule_v2 "$TOOL_NAME" "$TOOL_INPUT"
 
+# Normalize: strip embedded newlines/CRs from RULE (injection prevention, Layer 2)
+RULE="${RULE//$'\n'/}"
+RULE="${RULE//$'\r'/}"
+
+# Reject rules still containing newlines after normalization (defense in depth)
+if [[ $RULE == *$'\n'* ]] || [[ $RULE == *$'\r'* ]]; then
+	RULE="WebFetch(unknown)"
+fi
+
 # --- Snapshot whether this rule existed before this invocation ---
 SEEN_BEFORE=0
 # Only check history for specific rules.
