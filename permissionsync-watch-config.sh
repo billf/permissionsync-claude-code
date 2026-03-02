@@ -12,7 +12,8 @@ eval "$(jq -r '@sh "SOURCE=\(.source // "") FILE_PATH=\(.file_path // "") SESSIO
 [[ $SOURCE != "user_settings" ]] && exit 0
 
 SETTINGS_PATH="${FILE_PATH:-$HOME/.claude/settings.json}"
-CHANGES_LOG="$HOME/.claude/config-changes.jsonl"
+BASE_LOG="${CLAUDE_PERMISSION_LOG:-$HOME/.claude/permission-approvals.jsonl}"
+CHANGES_LOG="$(dirname "$BASE_LOG")/config-changes.jsonl"
 
 # Permissive if file doesn't exist yet
 if [[ ! -f $SETTINGS_PATH ]]; then
