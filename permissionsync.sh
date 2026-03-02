@@ -87,12 +87,72 @@ cmd_status() {
 	if [[ -f $settings ]]; then
 		if jq -e '.hooks.PostToolUse[]?.hooks[]? | select(.command != null and (.command | contains("log-confirmed")))' \
 			"$settings" >/dev/null 2>&1; then
-			echo "  PostToolUse: installed (confirmed-approvals log)"
+			echo "  PostToolUse:         installed (permissionsync-log-confirmed.sh)"
 			posttooluse_installed=1
 		fi
 	fi
 	if [[ $posttooluse_installed -eq 0 ]]; then
-		echo "  PostToolUse: NOT installed"
+		echo "  PostToolUse:         missing"
+	fi
+
+	local ptuf_installed=0
+	if [[ -f $settings ]]; then
+		if jq -e '.hooks.PostToolUseFailure[]?.hooks[]? | select(.command != null and (.command | contains("log-hook-errors")))' \
+			"$settings" >/dev/null 2>&1; then
+			echo "  PostToolUseFailure:  installed (permissionsync-log-hook-errors.sh)"
+			ptuf_installed=1
+		fi
+	fi
+	if [[ $ptuf_installed -eq 0 ]]; then
+		echo "  PostToolUseFailure:  missing"
+	fi
+
+	local configchange_installed=0
+	if [[ -f $settings ]]; then
+		if jq -e '.hooks.ConfigChange[]?.hooks[]? | select(.command != null and (.command | contains("watch-config")))' \
+			"$settings" >/dev/null 2>&1; then
+			echo "  ConfigChange:        installed (permissionsync-watch-config.sh)"
+			configchange_installed=1
+		fi
+	fi
+	if [[ $configchange_installed -eq 0 ]]; then
+		echo "  ConfigChange:        missing"
+	fi
+
+	local sessionend_installed=0
+	if [[ -f $settings ]]; then
+		if jq -e '.hooks.SessionEnd[]?.hooks[]? | select(.command != null and (.command | contains("sync-on-end")))' \
+			"$settings" >/dev/null 2>&1; then
+			echo "  SessionEnd:          installed (permissionsync-sync-on-end.sh)"
+			sessionend_installed=1
+		fi
+	fi
+	if [[ $sessionend_installed -eq 0 ]]; then
+		echo "  SessionEnd:          missing"
+	fi
+
+	local sessionstart_installed=0
+	if [[ -f $settings ]]; then
+		if jq -e '.hooks.SessionStart[]?.hooks[]? | select(.command != null and (.command | contains("session-start")))' \
+			"$settings" >/dev/null 2>&1; then
+			echo "  SessionStart:        installed (permissionsync-session-start.sh)"
+			sessionstart_installed=1
+		fi
+	fi
+	if [[ $sessionstart_installed -eq 0 ]]; then
+		echo "  SessionStart:        missing"
+	fi
+
+	local worktreecreate_installed=0
+	if [[ -f $settings ]]; then
+		if jq -e '.hooks.WorktreeCreate[]?.hooks[]? | select(.command != null and (.command | contains("worktree-create")))' \
+			"$settings" >/dev/null 2>&1; then
+			echo "  WorktreeCreate:      installed (permissionsync-worktree-create.sh)"
+			worktreecreate_installed=1
+		fi
+	fi
+	if [[ $worktreecreate_installed -eq 0 ]]; then
+		echo "  WorktreeCreate:      missing"
 	fi
 	echo ""
 

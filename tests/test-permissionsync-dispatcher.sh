@@ -173,6 +173,60 @@ assert_contains "status shows permissionsync-cc header" "permissionsync-cc" "$ou
 assert_contains "status shows Hooks section" "Hooks:" "$output"
 assert_contains "status shows Settings section" "Settings" "$output"
 
+# --- Tests 13b: status shows all 7 hook lines when fully installed ---
+FAKE_HOME_FULL=$(mktemp -d)
+mkdir -p "$FAKE_HOME_FULL/.claude"
+HOOKS_DIR_FULL="$FAKE_HOME_FULL/.claude/hooks"
+jq -nc \
+	--arg pr "CLAUDE_PERMISSION_MODE=log ${HOOKS_DIR_FULL}/permissionsync-log-permission.sh" \
+	--arg ptu "${HOOKS_DIR_FULL}/permissionsync-log-confirmed.sh" \
+	--arg ptuf "${HOOKS_DIR_FULL}/permissionsync-log-hook-errors.sh" \
+	--arg cc "${HOOKS_DIR_FULL}/permissionsync-watch-config.sh" \
+	--arg se "${HOOKS_DIR_FULL}/permissionsync-sync-on-end.sh" \
+	--arg ss "${HOOKS_DIR_FULL}/permissionsync-session-start.sh" \
+	--arg wc "${HOOKS_DIR_FULL}/permissionsync-worktree-create.sh" \
+	'{hooks:{
+		PermissionRequest:[{matcher:"*",hooks:[{type:"command",command:$pr}]}],
+		PostToolUse:[{matcher:"*",hooks:[{type:"command",command:$ptu}]}],
+		PostToolUseFailure:[{matcher:"*",hooks:[{type:"command",command:$ptuf}]}],
+		ConfigChange:[{matcher:"user_settings",hooks:[{type:"command",command:$cc}]}],
+		SessionEnd:[{matcher:"*",hooks:[{type:"command",command:$se}]}],
+		SessionStart:[{hooks:[{type:"command",command:$ss}]}],
+		WorktreeCreate:[{hooks:[{type:"command",command:$wc}]}]
+	}}' >"$FAKE_HOME_FULL/.claude/settings.json"
+output_full=$(HOME="$FAKE_HOME_FULL" bash "$DISPATCHER_COPY" status 2>/dev/null)
+assert_contains "full install: PermissionRequest installed" "PermissionRequest:" "$output_full"
+assert_contains "full install: PostToolUse installed" "PostToolUse:" "$output_full"
+assert_contains "full install: PostToolUseFailure installed" "PostToolUseFailure:" "$output_full"
+assert_contains "full install: ConfigChange installed" "ConfigChange:" "$output_full"
+assert_contains "full install: SessionEnd installed" "SessionEnd:" "$output_full"
+assert_contains "full install: SessionStart installed" "SessionStart:" "$output_full"
+assert_contains "full install: WorktreeCreate installed" "WorktreeCreate:" "$output_full"
+assert_contains "full install: PostToolUse shows script name" "permissionsync-log-confirmed.sh" "$output_full"
+assert_contains "full install: PostToolUseFailure shows script name" "permissionsync-log-hook-errors.sh" "$output_full"
+assert_contains "full install: ConfigChange shows script name" "permissionsync-watch-config.sh" "$output_full"
+assert_contains "full install: SessionEnd shows script name" "permissionsync-sync-on-end.sh" "$output_full"
+assert_contains "full install: SessionStart shows script name" "permissionsync-session-start.sh" "$output_full"
+assert_contains "full install: WorktreeCreate shows script name" "permissionsync-worktree-create.sh" "$output_full"
+rm -rf "$FAKE_HOME_FULL"
+
+# --- Tests 13c: partial install shows missing for absent hooks ---
+FAKE_HOME_PARTIAL=$(mktemp -d)
+mkdir -p "$FAKE_HOME_PARTIAL/.claude"
+HOOKS_DIR_PARTIAL="$FAKE_HOME_PARTIAL/.claude/hooks"
+jq -nc \
+	--arg pr "CLAUDE_PERMISSION_MODE=log ${HOOKS_DIR_PARTIAL}/permissionsync-log-permission.sh" \
+	'{hooks:{PermissionRequest:[{matcher:"*",hooks:[{type:"command",command:$pr}]}]}}' \
+	>"$FAKE_HOME_PARTIAL/.claude/settings.json"
+output_partial=$(HOME="$FAKE_HOME_PARTIAL" bash "$DISPATCHER_COPY" status 2>/dev/null)
+assert_contains "partial install: PostToolUse shows missing" "PostToolUse:         missing" "$output_partial"
+assert_contains "partial install: PostToolUseFailure shows missing" "PostToolUseFailure:  missing" "$output_partial"
+assert_contains "partial install: ConfigChange shows missing" "ConfigChange:        missing" "$output_partial"
+assert_contains "partial install: SessionEnd shows missing" "SessionEnd:          missing" "$output_partial"
+assert_contains "partial install: SessionStart shows missing" "SessionStart:        missing" "$output_partial"
+assert_contains "partial install: WorktreeCreate shows missing" "WorktreeCreate:      missing" "$output_partial"
+rm -rf "$FAKE_HOME_PARTIAL"
+
 # --- Test 14: legacy worktree mode detection (CLAUDE_PERMISSION_WORKTREE=1) ---
 FAKE_HOME_WT=$(mktemp -d)
 mkdir -p "$FAKE_HOME_WT/.claude"
