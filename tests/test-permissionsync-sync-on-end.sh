@@ -41,12 +41,12 @@ assert_exit() {
 
 echo "TAP version 13"
 
-# Create a stub sync-permissions.sh that records invocations
+# Create a stub permissionsync-sync.sh that records invocations
 STUB_DIR="${TMP_DIR}/stub"
 mkdir -p "$STUB_DIR"
 INVOCATIONS_LOG="${TMP_DIR}/invocations.log"
 
-cat >"${STUB_DIR}/sync-permissions.sh" <<'STUB'
+cat >"${STUB_DIR}/permissionsync-sync.sh" <<'STUB'
 #!/usr/bin/env bash
 echo "$*" >> "${INVOCATIONS_LOG}"
 exit 0
@@ -54,12 +54,12 @@ STUB
 # Export log path for stub
 export INVOCATIONS_LOG
 # Patch stub to use the exported variable
-cat >"${STUB_DIR}/sync-permissions.sh" <<STUB
+cat >"${STUB_DIR}/permissionsync-sync.sh" <<STUB
 #!/usr/bin/env bash
 echo "\$*" >> "$INVOCATIONS_LOG"
 exit 0
 STUB
-chmod +x "${STUB_DIR}/sync-permissions.sh"
+chmod +x "${STUB_DIR}/permissionsync-sync.sh"
 
 # Copy sync-on-end to stub dir so SCRIPT_DIR points there
 cp "${SCRIPT_DIR}/../permissionsync-sync-on-end.sh" "${STUB_DIR}/"
@@ -71,15 +71,15 @@ run_hook() {
 	bash "${STUB_DIR}/permissionsync-sync-on-end.sh" <<<"$input"
 }
 
-# --- Test 1: Invokes sync-permissions.sh ---
+# --- Test 1: Invokes permissionsync-sync.sh ---
 run_hook "clear"
-assert_eq "sync-permissions.sh is invoked on session end" "1" "$(wc -l <"$INVOCATIONS_LOG" | tr -d ' ')"
+assert_eq "permissionsync-sync.sh is invoked on session end" "1" "$(wc -l <"$INVOCATIONS_LOG" | tr -d ' ')"
 
-# --- Test 2: Passes --apply to sync-permissions.sh ---
+# --- Test 2: Passes --apply to permissionsync-sync.sh ---
 args=$(cat "$INVOCATIONS_LOG")
-assert_eq "sync-permissions.sh called with --apply" "--apply" "$args"
+assert_eq "permissionsync-sync.sh called with --apply" "--apply" "$args"
 
-# --- Test 3: Exits 0 when sync-permissions.sh is absent ---
+# --- Test 3: Exits 0 when permissionsync-sync.sh is absent ---
 ABSENT_DIR="${TMP_DIR}/absent"
 mkdir -p "$ABSENT_DIR"
 cp "${SCRIPT_DIR}/../permissionsync-sync-on-end.sh" "${ABSENT_DIR}/"
@@ -87,22 +87,22 @@ set +e
 bash "${ABSENT_DIR}/permissionsync-sync-on-end.sh" <<<'{"reason":"clear"}'
 exit_code=$?
 set -e
-assert_exit "exits 0 when sync-permissions.sh is absent" "0" "$exit_code"
+assert_exit "exits 0 when permissionsync-sync.sh is absent" "0" "$exit_code"
 
-# --- Test 4: Exits 0 when sync-permissions.sh fails ---
+# --- Test 4: Exits 0 when permissionsync-sync.sh fails ---
 FAIL_DIR="${TMP_DIR}/fail"
 mkdir -p "$FAIL_DIR"
-cat >"${FAIL_DIR}/sync-permissions.sh" <<'FAILSTUB'
+cat >"${FAIL_DIR}/permissionsync-sync.sh" <<'FAILSTUB'
 #!/usr/bin/env bash
 exit 1
 FAILSTUB
-chmod +x "${FAIL_DIR}/sync-permissions.sh"
+chmod +x "${FAIL_DIR}/permissionsync-sync.sh"
 cp "${SCRIPT_DIR}/../permissionsync-sync-on-end.sh" "${FAIL_DIR}/"
 set +e
 bash "${FAIL_DIR}/permissionsync-sync-on-end.sh" <<<'{"reason":"clear"}'
 exit_code=$?
 set -e
-assert_exit "exits 0 when sync-permissions.sh fails" "0" "$exit_code"
+assert_exit "exits 0 when permissionsync-sync.sh fails" "0" "$exit_code"
 
 echo "1..${TEST_NUM}"
 echo "# pass: ${PASS}"

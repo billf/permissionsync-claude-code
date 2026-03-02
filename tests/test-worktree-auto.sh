@@ -47,7 +47,7 @@ run_hook() {
 	CLAUDE_PERMISSION_LOG="$LOG_FILE" \
 		CLAUDE_PERMISSION_AUTO="$auto_mode" \
 		CLAUDE_PERMISSION_WORKTREE="$worktree_mode" \
-		bash "${SCRIPT_DIR}/../log-permission-auto.sh" <<<"$input"
+		bash "${SCRIPT_DIR}/../permissionsync-log-permission.sh" <<<"$input"
 }
 
 echo "TAP version 13"

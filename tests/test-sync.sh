@@ -5,8 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=../lib/permissionsync-lib.sh
 source "${SCRIPT_DIR}/../lib/permissionsync-lib.sh"
-# Source sync-permissions.sh functions by extracting filter_rules
-# (sync-permissions.sh is a script, not just a library — we source the lib
+# Source permissionsync-sync.sh functions by extracting filter_rules
+# (permissionsync-sync.sh is a script, not just a library — we source the lib
 # and redefine filter_rules inline to test it in isolation)
 
 PASS=0
@@ -487,7 +487,7 @@ printf '%s\n' \
 	'{"timestamp":"2026-01-01T00:00:03Z","tool":"Read","rule":"Read","base_command":"","is_safe":"false","auto_approved":"false","cwd":"/tmp"}' \
 	>"$STATS_LOG"
 
-stats_out=$(CLAUDE_PERMISSION_LOG="$STATS_LOG" bash "${SCRIPT_DIR}/../sync-permissions.sh" --stats 2>&1)
+stats_out=$(CLAUDE_PERMISSION_LOG="$STATS_LOG" bash "${SCRIPT_DIR}/../permissionsync-sync.sh" --stats 2>&1)
 
 TEST_NUM=$((TEST_NUM + 1))
 if echo "$stats_out" | grep -qF "Total requests logged:  4"; then
@@ -545,7 +545,7 @@ printf '%s\n' \
 	'{"timestamp":"2026-01-01T00:00:00Z","tool":"Bash","rule":"Bash(git push *)","base_command":"git push","is_safe":"false","cwd":"/tmp"}' \
 	>"$LEGACY_LOG"
 
-legacy_stats=$(CLAUDE_PERMISSION_LOG="$LEGACY_LOG" bash "${SCRIPT_DIR}/../sync-permissions.sh" --stats 2>&1)
+legacy_stats=$(CLAUDE_PERMISSION_LOG="$LEGACY_LOG" bash "${SCRIPT_DIR}/../permissionsync-sync.sh" --stats 2>&1)
 
 TEST_NUM=$((TEST_NUM + 1))
 if echo "$legacy_stats" | grep -qF "pre-v2 entries"; then

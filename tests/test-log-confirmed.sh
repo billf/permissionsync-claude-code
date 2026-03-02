@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test-log-confirmed.sh — unit tests for log-confirmed.sh (PostToolUse hook)
+# test-permissionsync-log-confirmed.sh — unit tests for permissionsync-log-confirmed.sh (PostToolUse hook)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -23,7 +23,7 @@ run_hook() {
 		--arg session "sess-test" \
 		'{tool_name: $tool, tool_input: $input, cwd: $cwd, session_id: $session}')
 	CLAUDE_PERMISSION_LOG="$BASE_LOG" \
-		bash "${SCRIPT_DIR}/../log-confirmed.sh" <<<"$input"
+		bash "${SCRIPT_DIR}/../permissionsync-log-confirmed.sh" <<<"$input"
 }
 
 assert_eq() {
@@ -99,7 +99,7 @@ assert_eq "confirmed log path uses base log directory" \
 lines_before=$(wc -l <"$CONFIRMED_LOG" | tr -d ' ')
 empty_input='{"tool_name":"","tool_input":{},"cwd":"/tmp","session_id":""}'
 CLAUDE_PERMISSION_LOG="$BASE_LOG" \
-	bash "${SCRIPT_DIR}/../log-confirmed.sh" <<<"$empty_input"
+	bash "${SCRIPT_DIR}/../permissionsync-log-confirmed.sh" <<<"$empty_input"
 lines_after=$(wc -l <"$CONFIRMED_LOG" | tr -d ' ')
 assert_eq "empty tool_name: no record appended" "$lines_before" "$lines_after"
 

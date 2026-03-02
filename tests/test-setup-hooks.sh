@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SETUP_HOOKS="${SCRIPT_DIR}/../setup-hooks.sh"
+SETUP_HOOKS="${SCRIPT_DIR}/../permissionsync-setup.sh"
 
 PASS=0
 FAIL=0
@@ -53,27 +53,24 @@ echo "TAP version 13"
 reset_home() {
 	rm -rf "$TEST_HOME"
 	TEST_HOME="$(mktemp -d)"
-	expected_log="CLAUDE_PERMISSION_MODE=log $TEST_HOME/.claude/hooks/log-permission-auto.sh"
-	expected_auto="CLAUDE_PERMISSION_MODE=auto $TEST_HOME/.claude/hooks/log-permission-auto.sh"
+	expected_log="CLAUDE_PERMISSION_MODE=log $TEST_HOME/.claude/hooks/permissionsync-log-permission.sh"
+	expected_auto="CLAUDE_PERMISSION_MODE=auto $TEST_HOME/.claude/hooks/permissionsync-log-permission.sh"
 }
 
 reset_home
 output=$(run_setup log)
 
-assert_file_exists "log mode: creates permissionsync-config.sh" \
-	"$TEST_HOME/.claude/hooks/permissionsync-config.sh"
+assert_file_exists "log mode: creates lib/permissionsync-config.sh" \
+	"$TEST_HOME/.claude/hooks/lib/permissionsync-config.sh"
 
-assert_file_exists "log mode: creates permissionsync-lib.sh" \
-	"$TEST_HOME/.claude/hooks/permissionsync-lib.sh"
+assert_file_exists "log mode: creates lib/permissionsync-lib.sh" \
+	"$TEST_HOME/.claude/hooks/lib/permissionsync-lib.sh"
 
-assert_file_exists "log mode: creates log-permission.sh" \
-	"$TEST_HOME/.claude/hooks/log-permission.sh"
+assert_file_exists "log mode: creates permissionsync-log-permission.sh" \
+	"$TEST_HOME/.claude/hooks/permissionsync-log-permission.sh"
 
-assert_file_exists "log mode: creates log-permission-auto.sh" \
-	"$TEST_HOME/.claude/hooks/log-permission-auto.sh"
-
-assert_file_exists "log mode: creates sync-permissions.sh" \
-	"$TEST_HOME/.claude/hooks/sync-permissions.sh"
+assert_file_exists "log mode: creates permissionsync-sync.sh" \
+	"$TEST_HOME/.claude/hooks/permissionsync-sync.sh"
 
 # --- Test 2: settings.json has PermissionRequest hook ---
 assert_file_exists "log mode: creates settings.json" \
@@ -248,7 +245,7 @@ assert_eq "mixed entry keeps custom hook" "1" "$mixed_custom_count"
 
 # --- Test 12: Worktree mode sets correct hook command ---
 reset_home
-expected_worktree="CLAUDE_PERMISSION_MODE=worktree $TEST_HOME/.claude/hooks/log-permission-auto.sh"
+expected_worktree="CLAUDE_PERMISSION_MODE=worktree $TEST_HOME/.claude/hooks/permissionsync-log-permission.sh"
 run_setup worktree >/dev/null
 
 hook_cmd_worktree=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
@@ -256,13 +253,13 @@ hook_cmd_worktree=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
 assert_eq "worktree mode: hook command uses CLAUDE_PERMISSION_MODE=worktree" \
 	"$expected_worktree" "$hook_cmd_worktree"
 
-# --- Test 13: Worktree mode copies worktree-sync.sh ---
-assert_file_exists "worktree mode: creates worktree-sync.sh" \
-	"$TEST_HOME/.claude/hooks/worktree-sync.sh"
+# --- Test 13: Worktree mode copies permissionsync-worktree-sync.sh ---
+assert_file_exists "worktree mode: creates permissionsync-worktree-sync.sh" \
+	"$TEST_HOME/.claude/hooks/permissionsync-worktree-sync.sh"
 
 # --- Test 14: Switching auto->worktree keeps one hook entry ---
 reset_home
-expected_worktree="CLAUDE_PERMISSION_MODE=worktree $TEST_HOME/.claude/hooks/log-permission-auto.sh"
+expected_worktree="CLAUDE_PERMISSION_MODE=worktree $TEST_HOME/.claude/hooks/permissionsync-log-permission.sh"
 run_setup auto >/dev/null
 run_setup worktree >/dev/null
 

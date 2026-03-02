@@ -72,11 +72,11 @@ EOF
 	chmod +x "$stub"
 }
 
-make_stub "sync-permissions.sh"
-make_stub "worktree-sync.sh"
-make_stub "merged-settings.sh"
+make_stub "permissionsync-sync.sh"
+make_stub "permissionsync-worktree-sync.sh"
+make_stub "permissionsync-settings.sh"
 make_stub "permissionsync-launch.sh"
-make_stub "install.sh"
+make_stub "permissionsync-install.sh"
 
 # Copy dispatcher alongside stubs (so SCRIPT_DIR finds them)
 DISPATCHER_COPY="${TMP_DIR}/permissionsync.sh"
@@ -103,22 +103,22 @@ else
 	FAIL=$((FAIL + 1))
 fi
 
-# --- Test 4: sync delegates to sync-permissions.sh ---
+# --- Test 4: sync delegates to permissionsync-sync.sh ---
 run_dispatcher sync --apply
 recorded=$(cat "$INVOKED")
-assert_contains "sync delegates to sync-permissions.sh" "sync-permissions.sh" "$recorded"
+assert_contains "sync delegates to permissionsync-sync.sh" "permissionsync-sync.sh" "$recorded"
 assert_contains "sync passes --apply through" "--apply" "$recorded"
 
-# --- Test 5: worktree delegates to worktree-sync.sh ---
+# --- Test 5: worktree delegates to permissionsync-worktree-sync.sh ---
 run_dispatcher worktree --report
 recorded=$(cat "$INVOKED")
-assert_contains "worktree delegates to worktree-sync.sh" "worktree-sync.sh" "$recorded"
+assert_contains "worktree delegates to permissionsync-worktree-sync.sh" "permissionsync-worktree-sync.sh" "$recorded"
 assert_contains "worktree passes --report through" "--report" "$recorded"
 
-# --- Test 6: settings delegates to merged-settings.sh ---
+# --- Test 6: settings delegates to permissionsync-settings.sh ---
 run_dispatcher settings --refine
 recorded=$(cat "$INVOKED")
-assert_contains "settings delegates to merged-settings.sh" "merged-settings.sh" "$recorded"
+assert_contains "settings delegates to permissionsync-settings.sh" "permissionsync-settings.sh" "$recorded"
 assert_contains "settings passes --refine through" "--refine" "$recorded"
 
 # --- Test 7: launch delegates to permissionsync-launch.sh ---
@@ -127,10 +127,10 @@ recorded=$(cat "$INVOKED")
 assert_contains "launch delegates to permissionsync-launch.sh" "permissionsync-launch.sh" "$recorded"
 assert_contains "launch passes worktree name through" "my-feature" "$recorded"
 
-# --- Test 8: install with no mode calls install.sh with no args ---
+# --- Test 8: install with no mode calls permissionsync-install.sh with no args ---
 run_dispatcher install
 recorded=$(cat "$INVOKED")
-assert_contains "install delegates to install.sh" "install.sh" "$recorded"
+assert_contains "install delegates to permissionsync-install.sh" "permissionsync-install.sh" "$recorded"
 
 # --- Test 9: install --mode=auto translates to --auto ---
 run_dispatcher install --mode=auto
@@ -145,8 +145,8 @@ assert_contains "install --mode=worktree passes --worktree" "--worktree" "$recor
 # --- Test 11: install --mode=log passes no mode arg ---
 run_dispatcher install --mode=log
 recorded=$(cat "$INVOKED")
-# Should have called install.sh but without --auto or --worktree
-assert_contains "install --mode=log calls install.sh" "install.sh" "$recorded"
+# Should have called permissionsync-install.sh but without --auto or --worktree
+assert_contains "install --mode=log calls permissionsync-install.sh" "permissionsync-install.sh" "$recorded"
 TEST_NUM=$((TEST_NUM + 1))
 if ! echo "$recorded" | grep -qF -- "--auto" && ! echo "$recorded" | grep -qF -- "--worktree"; then
 	echo "ok ${TEST_NUM} - install --mode=log passes no mode flag"

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# test-merged-settings.sh — tests for merged-settings.sh
+# test-permissionsync-settings.sh — tests for permissionsync-settings.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MERGED_SCRIPT="${SCRIPT_DIR}/../merged-settings.sh"
+MERGED_SCRIPT="${SCRIPT_DIR}/../permissionsync-settings.sh"
 ORIG_DIR="$(pwd)"
 
 PASS=0

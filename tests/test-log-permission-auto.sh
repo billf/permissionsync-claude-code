@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test-log-permission-auto.sh — regression tests for auto-approve behavior
+# test-permissionsync-log-permission.sh — regression tests for auto-approve behavior
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -19,7 +19,7 @@ run_hook() {
 	input=$(jq -nc --arg command "$command" --arg cwd "/tmp/repo" \
 		'{tool_name:"Bash", tool_input:{command:$command}, cwd:$cwd}')
 	CLAUDE_PERMISSION_LOG="$LOG_FILE" CLAUDE_PERMISSION_AUTO="$auto_mode" \
-		bash "${SCRIPT_DIR}/../log-permission-auto.sh" <<<"$input"
+		bash "${SCRIPT_DIR}/../permissionsync-log-permission.sh" <<<"$input"
 }
 
 run_hook_mode() {
@@ -28,7 +28,7 @@ run_hook_mode() {
 	input=$(jq -nc --arg command "$command" --arg cwd "/tmp/repo" \
 		'{tool_name:"Bash", tool_input:{command:$command}, cwd:$cwd}')
 	CLAUDE_PERMISSION_LOG="$LOG_FILE" CLAUDE_PERMISSION_MODE="$mode" \
-		bash "${SCRIPT_DIR}/../log-permission-auto.sh" <<<"$input"
+		bash "${SCRIPT_DIR}/../permissionsync-log-permission.sh" <<<"$input"
 }
 
 assert_behavior() {

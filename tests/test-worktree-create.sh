@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# test-worktree-create.sh — unit tests for worktree-create.sh
+# test-permissionsync-worktree-create.sh — unit tests for permissionsync-worktree-create.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOOK="${SCRIPT_DIR}/../worktree-create.sh"
+HOOK="${SCRIPT_DIR}/../permissionsync-worktree-create.sh"
 
 PASS=0
 FAIL=0

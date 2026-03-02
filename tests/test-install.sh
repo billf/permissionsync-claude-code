@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-INSTALL="${SCRIPT_DIR}/../install.sh"
+INSTALL="${SCRIPT_DIR}/../permissionsync-install.sh"
 
 PASS=0
 FAIL=0
@@ -30,8 +30,8 @@ assert_eq() {
 reset_home() {
 	rm -rf "$TEST_HOME"
 	TEST_HOME="$(mktemp -d)"
-	expected_log="CLAUDE_PERMISSION_MODE=log $TEST_HOME/.claude/hooks/log-permission-auto.sh"
-	expected_auto="CLAUDE_PERMISSION_MODE=auto $TEST_HOME/.claude/hooks/log-permission-auto.sh"
+	expected_log="CLAUDE_PERMISSION_MODE=log $TEST_HOME/.claude/hooks/permissionsync-log-permission.sh"
+	expected_auto="CLAUDE_PERMISSION_MODE=auto $TEST_HOME/.claude/hooks/permissionsync-log-permission.sh"
 }
 
 run_install() {
@@ -55,7 +55,7 @@ assert_eq "log mode installs one hook entry" "1" "$count"
 
 cmd=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
 	"$TEST_HOME/.claude/settings.json")
-assert_eq "log mode uses CLAUDE_PERMISSION_MODE=log log-permission-auto.sh" "$expected_log" "$cmd"
+assert_eq "log mode uses CLAUDE_PERMISSION_MODE=log permissionsync-log-permission.sh" "$expected_log" "$cmd"
 
 # --- Test 2: mode switch log->auto keeps one entry and updates command ---
 run_install --auto
@@ -151,7 +151,7 @@ assert_eq "mixed entry keeps custom hook" "1" "$custom_mixed_count"
 
 # --- Test 6: --worktree mode sets correct hook command ---
 reset_home
-expected_worktree="CLAUDE_PERMISSION_MODE=worktree $TEST_HOME/.claude/hooks/log-permission-auto.sh"
+expected_worktree="CLAUDE_PERMISSION_MODE=worktree $TEST_HOME/.claude/hooks/permissionsync-log-permission.sh"
 run_install --worktree
 
 cmd_wt=$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' \
@@ -163,9 +163,9 @@ count_wt=$(jq '[.hooks.PermissionRequest[]?.hooks[]?.command] | length' \
 	"$TEST_HOME/.claude/settings.json")
 assert_eq "--worktree: installs one hook entry" "1" "$count_wt"
 
-# --- Test 7: --worktree copies worktree-sync.sh ---
-assert_eq "--worktree: copies worktree-sync.sh" "1" \
-	"$(test -f "$TEST_HOME/.claude/hooks/worktree-sync.sh" && echo 1 || echo 0)"
+# --- Test 7: --worktree copies permissionsync-worktree-sync.sh ---
+assert_eq "--worktree: copies permissionsync-worktree-sync.sh" "1" \
+	"$(test -f "$TEST_HOME/.claude/hooks/permissionsync-worktree-sync.sh" && echo 1 || echo 0)"
 
 # --- Test 8: Mode switch worktree->log keeps one entry ---
 run_install
@@ -197,9 +197,13 @@ has_git=$(jq 'any(.permissions.allow[]; . == "Bash(git status *)")' \
 	"$TEST_HOME/.claude/settings.json")
 assert_eq "baseline includes git status rule" "true" "$has_git"
 
+has_bat=$(jq 'any(.permissions.allow[]; . == "Bash(bat *)")' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "baseline includes bat (always-safe) rule" "true" "$has_bat"
+
 has_fd=$(jq 'any(.permissions.allow[]; . == "Bash(fd *)")' \
 	"$TEST_HOME/.claude/settings.json")
-assert_eq "baseline includes fd (always-safe) rule" "true" "$has_fd"
+assert_eq "baseline excludes fd (not always-safe)" "false" "$has_fd"
 
 # --- Test 10: re-install does NOT duplicate baseline rules ---
 prev_count=$(jq '.permissions.allow | length' "$TEST_HOME/.claude/settings.json")

@@ -68,24 +68,24 @@ assert_exit_nonzero() {
 	fi
 }
 
-# Build a fake merged-settings.sh and claude for testing
+# Build a fake permissionsync-settings.sh and claude for testing
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-# Subdirectory for the launch script copy + its merged-settings.sh sibling
+# Subdirectory for the launch script copy + its permissionsync-settings.sh sibling
 BIN_DIR="${TMP_DIR}/bin"
 mkdir -p "$BIN_DIR"
 
 RECORDED_ARGS="${TMP_DIR}/recorded-args"
 export RECORDED_ARGS
 
-# Fake merged-settings.sh (placed beside the launch script copy so SCRIPT_DIR resolves it)
-cat >"${BIN_DIR}/merged-settings.sh" <<'EOF'
+# Fake permissionsync-settings.sh (placed beside the launch script copy so SCRIPT_DIR resolves it)
+cat >"${BIN_DIR}/permissionsync-settings.sh" <<'EOF'
 #!/usr/bin/env bash
 echo '{"permissions":{"allow":[],"deny":[]}}' >&1
-printf 'merged-settings: %s\n' "$*" >>"$RECORDED_ARGS"
+printf 'permissionsync-settings: %s\n' "$*" >>"$RECORDED_ARGS"
 EOF
-chmod +x "${BIN_DIR}/merged-settings.sh"
+chmod +x "${BIN_DIR}/permissionsync-settings.sh"
 
 # Fake claude (on PATH)
 cat >"${TMP_DIR}/claude" <<'EOF'
@@ -94,7 +94,7 @@ printf 'claude: %s\n' "$*" >>"$RECORDED_ARGS"
 EOF
 chmod +x "${TMP_DIR}/claude"
 
-# Copy launch script into BIN_DIR so it finds merged-settings.sh via SCRIPT_DIR
+# Copy launch script into BIN_DIR so it finds permissionsync-settings.sh via SCRIPT_DIR
 LAUNCH_COPY="${BIN_DIR}/permissionsync-launch.sh"
 cp "$LAUNCH" "$LAUNCH_COPY"
 
@@ -135,15 +135,15 @@ assert_contains "--global-only appears in dry-run output" "--global-only" "$outp
 output=$(run_launch_from_tmp --dry-run feature-x -- --resume abc123 2>&1)
 assert_contains "--dry-run shows extra claude args" "--resume" "$output"
 
-# --- Test 9: normal launch calls merged-settings.sh ---
+# --- Test 9: normal launch calls permissionsync-settings.sh ---
 run_launch_from_tmp my-feature 2>/dev/null || true
 recorded=$(cat "$RECORDED_ARGS")
-assert_contains "normal launch invokes merged-settings.sh" "merged-settings:" "$recorded"
+assert_contains "normal launch invokes permissionsync-settings.sh" "permissionsync-settings:" "$recorded"
 
-# --- Test 10: normal launch passes --refine to merged-settings.sh by default ---
+# --- Test 10: normal launch passes --refine to permissionsync-settings.sh by default ---
 run_launch_from_tmp my-feature 2>/dev/null || true
 recorded=$(cat "$RECORDED_ARGS")
-assert_contains "normal launch passes --refine to merged-settings.sh" "--refine" "$recorded"
+assert_contains "normal launch passes --refine to permissionsync-settings.sh" "--refine" "$recorded"
 
 # --- Test 11: normal launch calls claude with -w and --settings ---
 run_launch_from_tmp my-feature 2>/dev/null || true
@@ -157,10 +157,10 @@ run_launch_from_tmp my-worktree 2>/dev/null || true
 recorded=$(cat "$RECORDED_ARGS")
 assert_contains "worktree name passed to claude" "my-worktree" "$recorded"
 
-# --- Test 13: --from-log passes --from-log to merged-settings.sh ---
+# --- Test 13: --from-log passes --from-log to permissionsync-settings.sh ---
 run_launch_from_tmp --from-log my-feature 2>/dev/null || true
 recorded=$(cat "$RECORDED_ARGS")
-assert_contains "--from-log forwarded to merged-settings.sh" "--from-log" "$recorded"
+assert_contains "--from-log forwarded to permissionsync-settings.sh" "--from-log" "$recorded"
 
 # --- Test 14: extra claude args passed through ---
 run_launch_from_tmp my-feature -- --resume sess123 2>/dev/null || true

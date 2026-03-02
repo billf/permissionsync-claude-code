@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# test-worktree-sync.sh — tests for worktree-sync.sh
+# test-permissionsync-worktree-sync.sh — tests for permissionsync-worktree-sync.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SYNC_SCRIPT="${SCRIPT_DIR}/../worktree-sync.sh"
+SYNC_SCRIPT="${SCRIPT_DIR}/../permissionsync-worktree-sync.sh"
 ORIG_DIR="$(pwd)"
 
 PASS=0
