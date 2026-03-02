@@ -27,7 +27,7 @@ Five hooks that together:
 
 ### Nix Flake
 
-Add as a flake input and call `setup-hooks.sh` from your devShell's `shellHook`:
+Add as a flake input and call `permissionsync-setup.sh` from your devShell's `shellHook`:
 
 ```nix
 {
@@ -45,9 +45,9 @@ Add as a flake input and call `setup-hooks.sh` from your devShell's `shellHook`:
     in {
       devShells.${system}.default = pkgs.mkShell {
         shellHook = ''
-          ${psc}/bin/setup-hooks.sh            # log-only (default)
-          # ${psc}/bin/setup-hooks.sh auto      # auto-approve mode
-          # ${psc}/bin/setup-hooks.sh worktree  # auto-approve + sibling worktree rules
+          ${psc}/bin/permissionsync-setup.sh            # log-only (default)
+          # ${psc}/bin/permissionsync-setup.sh auto      # auto-approve mode
+          # ${psc}/bin/permissionsync-setup.sh worktree  # auto-approve + sibling worktree rules
         '';
       };
     };
@@ -62,31 +62,58 @@ An overlay is also available at `permissionsync-cc.overlays.default` if you pref
 
 ```bash
 git clone https://github.com/billf/permissionsync-claude-code.git && cd permissionsync-claude-code
-./install.sh              # log-only mode
+./permissionsync-install.sh              # log-only mode
 # or
-./install.sh --auto       # auto-approve previously-seen rules
+./permissionsync-install.sh --auto       # auto-approve previously-seen rules
 # or
-./install.sh --worktree   # auto-approve + sibling worktree rules
+./permissionsync-install.sh --worktree   # auto-approve + sibling worktree rules
 ```
 
 ## What gets installed
 
 | File | Purpose |
 |------|---------|
-| `~/.claude/hooks/log-permission-auto.sh` | `PermissionRequest` hook — logs requests, optionally auto-approves |
-| `~/.claude/hooks/log-confirmed.sh` | `PostToolUse` hook — logs confirmed (approved + executed) operations |
+| `~/.claude/hooks/permissionsync-log-permission.sh` | `PermissionRequest` hook — logs requests, optionally auto-approves |
+| `~/.claude/hooks/permissionsync-log-confirmed.sh` | `PostToolUse` hook — logs confirmed (approved + executed) operations |
 | `~/.claude/hooks/permissionsync-log-hook-errors.sh` | `PostToolUseFailure` hook — logs failed tool executions |
 | `~/.claude/hooks/permissionsync-watch-config.sh` | `ConfigChange` hook — warns when permissionsync hooks are removed from settings |
 | `~/.claude/hooks/permissionsync-sync-on-end.sh` | `SessionEnd` hook — auto-runs `sync --apply` on session exit |
-| `~/.claude/hooks/sync-permissions.sh` | Merges JSONL log into `~/.claude/settings.json` |
-| `~/.claude/hooks/worktree-sync.sh` | Aggregates and syncs permission rules across git worktrees |
-| `~/.claude/hooks/merged-settings.sh` | Outputs merged permissions JSON for `claude --settings` |
-| `~/.claude/hooks/permissionsync-launch.sh` | Launches claude in a worktree with merged permissions |
-| `~/.claude/hooks/permissionsync.sh` | Unified CLI dispatcher for all subcommands |
-| `~/.claude/hooks/permissionsync-config.sh` | Data definitions: safe subcommands, indirection types, blocklists |
-| `~/.claude/hooks/permissionsync-lib.sh` | Core library: rule building, indirection peeling, worktree discovery |
+| `~/.claude/hooks/permissionsync-session-start.sh` | `SessionStart` hook — shows pending rule drift at session open |
+| `~/.claude/hooks/permissionsync-worktree-create.sh` | `WorktreeCreate` hook — seeds `settings.local.json` into new worktrees |
+| `~/.claude/hooks/permissionsync-sync.sh` | Worker — merges JSONL log into `~/.claude/settings.json` |
+| `~/.claude/hooks/permissionsync-worktree-sync.sh` | Worker — aggregates and syncs permission rules across git worktrees |
+| `~/.claude/hooks/permissionsync-settings.sh` | Worker — outputs merged permissions JSON for `claude --settings` |
+| `~/.claude/hooks/permissionsync-launch.sh` | Worker — launches claude in a worktree with merged permissions |
+| `~/.claude/hooks/permissionsync.sh` | CLI entry point — unified dispatcher for all subcommands |
+| `~/.claude/hooks/lib/permissionsync-lib.sh` | Library — rule building, indirection peeling, worktree discovery (sourced only) |
+| `~/.claude/hooks/lib/permissionsync-config.sh` | Library — safe subcommands, indirection types, blocklists (sourced only) |
 
-The installer wires five hooks into `~/.claude/settings.json`:
+## Script Taxonomy
+
+Scripts are organized into three visibility tiers:
+
+| Script | Role | Wired as | User-visible? |
+|--------|------|----------|---------------|
+| `permissionsync.sh` | CLI entry point | — | `permissionsync <cmd>` |
+| `permissionsync-log-permission.sh` | Hook | `PermissionRequest` | settings.json |
+| `permissionsync-log-confirmed.sh` | Hook | `PostToolUse` | settings.json |
+| `permissionsync-log-hook-errors.sh` | Hook | `PostToolUseFailure` | settings.json |
+| `permissionsync-watch-config.sh` | Hook | `ConfigChange` | settings.json |
+| `permissionsync-sync-on-end.sh` | Hook | `SessionEnd` | settings.json |
+| `permissionsync-session-start.sh` | Hook | `SessionStart` | settings.json |
+| `permissionsync-worktree-create.sh` | Hook | `WorktreeCreate` | settings.json |
+| `permissionsync-sync.sh` | Worker | — | via dispatcher |
+| `permissionsync-worktree-sync.sh` | Worker | — | via dispatcher |
+| `permissionsync-settings.sh` | Worker | — | `--settings <(...)` |
+| `permissionsync-launch.sh` | Worker | — | `permissionsync launch` |
+| `permissionsync-install.sh` | Installer | — | one-time setup |
+| `permissionsync-setup.sh` | Installer | — | Nix shellHook |
+| `lib/permissionsync-lib.sh` | Library | — | sourced only |
+| `lib/permissionsync-config.sh` | Library | — | sourced only |
+
+**Libraries** live in `lib/` and are sourced by other scripts — they are never executed directly and are not on `PATH` in the Nix package.
+
+The installer wires seven hooks into `~/.claude/settings.json`:
 
 ```json
 {
@@ -94,13 +121,13 @@ The installer wires five hooks into `~/.claude/settings.json`:
     "PermissionRequest": [
       {
         "matcher": "*",
-        "hooks": [{"type": "command", "command": "CLAUDE_PERMISSION_MODE=log ~/.claude/hooks/log-permission-auto.sh"}]
+        "hooks": [{"type": "command", "command": "CLAUDE_PERMISSION_MODE=log ~/.claude/hooks/permissionsync-log-permission.sh"}]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "*",
-        "hooks": [{"type": "command", "command": "~/.claude/hooks/log-confirmed.sh"}]
+        "hooks": [{"type": "command", "command": "~/.claude/hooks/permissionsync-log-confirmed.sh"}]
       }
     ],
     "PostToolUseFailure": [
@@ -120,6 +147,18 @@ The installer wires five hooks into `~/.claude/settings.json`:
         "matcher": "*",
         "hooks": [{"type": "command", "command": "~/.claude/hooks/permissionsync-sync-on-end.sh"}]
       }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [{"type": "command", "command": "~/.claude/hooks/permissionsync-session-start.sh"}]
+      }
+    ],
+    "WorktreeCreate": [
+      {
+        "matcher": "*",
+        "hooks": [{"type": "command", "command": "~/.claude/hooks/permissionsync-worktree-create.sh"}]
+      }
     ]
   }
 }
@@ -137,7 +176,7 @@ Just use Claude Code normally. Every time you see a permission prompt and approv
 {"timestamp":"2026-02-06T15:32:00Z","tool":"Write","rule":"Write","cwd":"/home/you/project-a"}
 ```
 
-A second log, `~/.claude/confirmed-approvals.jsonl`, is written by the `PostToolUse` hook. Unlike the request log (which captures all prompts including denied ones), the confirmed log only records tools that actually executed — giving a clean record of truly approved operations. Use `--from-confirmed` with `sync-permissions.sh` to sync only from confirmed approvals.
+A second log, `~/.claude/confirmed-approvals.jsonl`, is written by the `PostToolUse` hook. Unlike the request log (which captures all prompts including denied ones), the confirmed log only records tools that actually executed — giving a clean record of truly approved operations. Use `--from-confirmed` with `permissionsync-sync.sh` to sync only from confirmed approvals.
 
 ### Audit Trilogy & Lifecycle Hooks
 
@@ -161,17 +200,17 @@ Fires whenever `~/.claude/settings.json` is written. Checks whether permissionsy
 {"timestamp":"...","source":"user_settings","file_path":"~/.claude/settings.json","hooks_intact":true}
 ```
 
-If the hooks were removed, prints a warning to stderr and logs `hooks_intact: false`. Re-run `install.sh` to restore them.
+If the hooks were removed, prints a warning to stderr and logs `hooks_intact: false`. Re-run `permissionsync-install.sh` to restore them.
 
 **`SessionEnd` → auto-sync**
 
-When a session ends, `permissionsync-sync-on-end.sh` automatically runs `sync-permissions.sh --apply`. Rules accumulated during the session are promoted to `~/.claude/settings.json` without any manual step. The next session starts with those rules already present.
+When a session ends, `permissionsync-sync-on-end.sh` runs `permissionsync-sync.sh --apply` automatically. Rules accumulated during the session are promoted to `~/.claude/settings.json` without any manual step. The next session starts with those rules already present.
 
 ### Phase 2: Review & sync (on demand)
 
 ```bash
 # See what would be added
-~/.claude/hooks/sync-permissions.sh --preview
+~/.claude/hooks/permissionsync-sync.sh --preview
 
 # === Current rules in ~/.claude/settings.json ===
 #   Bash(git status *)
@@ -184,72 +223,72 @@ When a session ends, `permissionsync-sync-on-end.sh` automatically runs `sync-pe
 # ["Bash(git status *)", "Bash(npm run *)", "Write"]
 
 # Apply
-~/.claude/hooks/sync-permissions.sh --apply
+~/.claude/hooks/permissionsync-sync.sh --apply
 
 # Just dump the merged array (for piping/scripting)
-~/.claude/hooks/sync-permissions.sh --print
+~/.claude/hooks/permissionsync-sync.sh --print
 
 # Show diff between current settings and proposed merge
-~/.claude/hooks/sync-permissions.sh --diff
+~/.claude/hooks/permissionsync-sync.sh --diff
 
 # Propose replacing broad rules with fine-grained safe-subcommand rules
-~/.claude/hooks/sync-permissions.sh --refine
+~/.claude/hooks/permissionsync-sync.sh --refine
 
 # Apply refined rules
-~/.claude/hooks/sync-permissions.sh --refine --apply
+~/.claude/hooks/permissionsync-sync.sh --refine --apply
 
 # Sync from confirmed-approvals log (approved + executed ops only)
-~/.claude/hooks/sync-permissions.sh --from-confirmed --preview
-~/.claude/hooks/sync-permissions.sh --from-confirmed --apply
+~/.claude/hooks/permissionsync-sync.sh --from-confirmed --preview
+~/.claude/hooks/permissionsync-sync.sh --from-confirmed --apply
 ```
 
 ### Phase 2b: Cross-worktree sync
 
-If you use git worktrees, `worktree-sync.sh` aggregates permission rules from all sibling worktrees' `.claude/settings.local.json` files into a shared superset:
+If you use git worktrees, `permissionsync-worktree-sync.sh` aggregates permission rules from all sibling worktrees' `.claude/settings.local.json` files into a shared superset:
 
 ```bash
 # Preview: show all worktrees, rule counts, and aggregated superset
-~/.claude/hooks/worktree-sync.sh --preview
+~/.claude/hooks/permissionsync-worktree-sync.sh --preview
 
 # Show which rules appear in how many worktrees
-~/.claude/hooks/worktree-sync.sh --report
+~/.claude/hooks/permissionsync-worktree-sync.sh --report
 
 # Diff current worktree's rules vs the aggregated superset
-~/.claude/hooks/worktree-sync.sh --diff
+~/.claude/hooks/permissionsync-worktree-sync.sh --diff
 
 # Write aggregated rules to current worktree's settings.local.json
-~/.claude/hooks/worktree-sync.sh --apply
+~/.claude/hooks/permissionsync-worktree-sync.sh --apply
 
 # Write aggregated rules to ALL worktrees
-~/.claude/hooks/worktree-sync.sh --apply-all
+~/.claude/hooks/permissionsync-worktree-sync.sh --apply-all
 
 # Also include rules from the JSONL approval log (scoped to worktree CWDs)
-~/.claude/hooks/worktree-sync.sh --from-log --preview
+~/.claude/hooks/permissionsync-worktree-sync.sh --from-log --preview
 
 # Replace broad rules with safe-subcommand expansions
-~/.claude/hooks/worktree-sync.sh --refine
-~/.claude/hooks/worktree-sync.sh --refine --apply
-~/.claude/hooks/worktree-sync.sh --refine --apply-all
+~/.claude/hooks/permissionsync-worktree-sync.sh --refine
+~/.claude/hooks/permissionsync-worktree-sync.sh --refine --apply
+~/.claude/hooks/permissionsync-worktree-sync.sh --refine --apply-all
 ```
 
 ### Worktree Launch Integration (`claude --worktree`)
 
 Claude Code's `claude --worktree` (`-w`) starts sessions in isolated git worktrees at `<repo>/.claude/worktrees/<name>`. Combined with `--settings`, you can launch a worktree pre-loaded with permissions from all sibling worktrees and global settings — no re-approval needed.
 
-**How it works:** `--settings <path>` layers additional settings on top of the normal hierarchy. Using bash process substitution, `merged-settings.sh` generates the JSON on the fly:
+**How it works:** `--settings <path>` layers additional settings on top of the normal hierarchy. Using bash process substitution, `permissionsync-settings.sh` generates the JSON on the fly:
 
 ```bash
 # Launch a worktree with merged permissions from all sources
-claude -w feature-x --settings <(~/.claude/hooks/merged-settings.sh)
+claude -w feature-x --settings <(~/.claude/hooks/permissionsync-settings.sh)
 
 # Same, but refine broad rules (e.g. Bash(git *)) into safe subcommands
-claude -w feature-x --settings <(~/.claude/hooks/merged-settings.sh --refine)
+claude -w feature-x --settings <(~/.claude/hooks/permissionsync-settings.sh --refine)
 
 # Also include rules from the JSONL approval log
-claude -w feature-x --settings <(~/.claude/hooks/merged-settings.sh --refine --from-log)
+claude -w feature-x --settings <(~/.claude/hooks/permissionsync-settings.sh --refine --from-log)
 
 # Global settings only (no worktree rule discovery)
-claude -w feature-x --settings <(~/.claude/hooks/merged-settings.sh --global-only)
+claude -w feature-x --settings <(~/.claude/hooks/permissionsync-settings.sh --global-only)
 ```
 
 **Using `permissionsync-launch.sh` (simpler — no process substitution):**
@@ -278,7 +317,7 @@ Then just: `cw feature-x`
 If you trust your accumulated log and want to skip repeat prompts:
 
 ```bash
-./install.sh --auto
+./permissionsync-install.sh --auto
 ```
 
 This sets `CLAUDE_PERMISSION_MODE=auto`, which makes the hook auto-approve any rule that already exists in the JSONL log. New, never-before-seen tool uses still fall through to the interactive prompt.
@@ -286,7 +325,7 @@ This sets `CLAUDE_PERMISSION_MODE=auto`, which makes the hook auto-approve any r
 **Worktree mode** takes this further:
 
 ```bash
-./install.sh --worktree
+./permissionsync-install.sh --worktree
 ```
 
 This sets `CLAUDE_PERMISSION_MODE=worktree`, enabling three layers of auto-approval:
@@ -295,7 +334,7 @@ This sets `CLAUDE_PERMISSION_MODE=worktree`, enabling three layers of auto-appro
 2. **Sibling worktree matching** — if any sibling worktree's `.claude/settings.local.json` already contains a rule, it's approved
 3. **Log history matching** — if the JSONL log contains the rule from a previous session, it's approved
 
-Re-running `install.sh` with a different flag switches modes (idempotent — creates a `.bak` backup of settings.json).
+Re-running `permissionsync-install.sh` with a different flag switches modes (idempotent — creates a `.bak` backup of settings.json).
 
 ## How rules are generated
 
@@ -310,7 +349,7 @@ Re-running `install.sh` with a different flag switches modes (idempotent — cre
 
 **Tracked binaries** with subcommand-level rules: `git`, `cargo`, `npm`, `nix`, `docker`, `kubectl`, `pip`, `brew`, `gh`, `rustup`, `yarn`, `pnpm`, `jj`, `terraform`. For these, the strategy emits `Bash(<binary> <subcommand> *)` (e.g. `Bash(git commit *)`). For untracked binaries, it falls back to `Bash(<binary> *)`.
 
-**Always-safe binaries**: `fd`, `rg`, `bat`, `delta`, `difftastic` — read-only tools that are automatically classified `IS_SAFE=true` regardless of arguments (subject to metacharacter guards). Broad rules like `Bash(rg *)` are approved immediately.
+**Always-safe binaries**: `bat`, `delta`, `difftastic` — read-only tools that are automatically classified `IS_SAFE=true` regardless of arguments (subject to metacharacter guards). Broad rules like `Bash(bat *)` are approved immediately.
 
 **Indirection peeling**: wrappers like `sudo`, `env`, `xargs`, `bash -c`, `nice`, `nohup`, `time`, and `command` are stripped before extracting the actual binary and subcommand. For example, `sudo -u root git status` produces `Bash(git status *)`.
 
@@ -325,15 +364,15 @@ Re-running `install.sh` with a different flag switches modes (idempotent — cre
 Single entry point that delegates to the individual scripts:
 
 ```bash
-~/.claude/hooks/permissionsync.sh sync [FLAGS]        # sync-permissions.sh
-~/.claude/hooks/permissionsync.sh worktree [FLAGS]    # worktree-sync.sh
-~/.claude/hooks/permissionsync.sh settings [FLAGS]    # merged-settings.sh
+~/.claude/hooks/permissionsync.sh sync [FLAGS]        # permissionsync-sync.sh
+~/.claude/hooks/permissionsync.sh worktree [FLAGS]    # permissionsync-worktree-sync.sh
+~/.claude/hooks/permissionsync.sh settings [FLAGS]    # permissionsync-settings.sh
 ~/.claude/hooks/permissionsync.sh launch [FLAGS] <name>  # permissionsync-launch.sh
-~/.claude/hooks/permissionsync.sh install [--mode=log|auto|worktree]  # install.sh
+~/.claude/hooks/permissionsync.sh install [--mode=log|auto|worktree]  # permissionsync-install.sh
 ~/.claude/hooks/permissionsync.sh status              # show hooks, rule counts, log state
 ```
 
-### sync-permissions.sh
+### permissionsync-sync.sh (`sync`)
 
 Reads the JSONL approval log and merges rules into `~/.claude/settings.json` (global, user-level).
 
@@ -350,7 +389,7 @@ Reads the JSONL approval log and merges rules into `~/.claude/settings.json` (gl
 | `--init-base` | Preview baseline safe-subcommand rules (from `base-settings.json`) |
 | `--init-base --apply` | Seed baseline rules into `~/.claude/settings.json` |
 
-### worktree-sync.sh
+### permissionsync-worktree-sync.sh (`worktree`)
 
 Aggregates rules from sibling worktrees' `.claude/settings.local.json` files (per-project).
 
@@ -367,9 +406,9 @@ Aggregates rules from sibling worktrees' `.claude/settings.local.json` files (pe
 | `--refine --apply-all` | Refine + write to all worktrees |
 | `--from-log` | Also include rules from the JSONL approval log (scoped to worktree CWDs) |
 
-### merged-settings.sh
+### permissionsync-settings.sh (`settings`)
 
-Outputs a complete `{"permissions":{"allow":[...],"deny":[...]}}` JSON document to stdout. Designed for `claude --settings <(merged-settings.sh)`.
+Outputs a complete `{"permissions":{"allow":[...],"deny":[...]}}` JSON document to stdout. Designed for `claude --settings <(permissionsync-settings.sh)`.
 
 | Flag | Description |
 |------|-------------|
@@ -383,7 +422,7 @@ All diagnostic output goes to stderr. stdout is pure JSON only.
 
 ### permissionsync-launch.sh
 
-Launches `claude` in a new worktree with merged permissions. Generates a temp settings file from `merged-settings.sh` and passes it via `--settings`.
+Launches `claude` in a new worktree with merged permissions. Generates a temp settings file from `permissionsync-settings.sh` and passes it via `--settings`.
 
 | Flag | Description |
 |------|-------------|
@@ -408,8 +447,8 @@ Legacy aliases (still supported): `CLAUDE_PERMISSION_AUTO=1` (→ `auto` mode), 
 **Shell alias for quick sync:**
 ```bash
 # .bashrc / .zshrc
-alias claude-sync-perms='~/.claude/hooks/sync-permissions.sh'
-alias claude-perms-preview='~/.claude/hooks/sync-permissions.sh --preview'
+alias claude-sync-perms='~/.claude/hooks/permissionsync.sh sync'
+alias claude-perms-preview='~/.claude/hooks/permissionsync.sh sync --preview'
 ```
 
 **View the raw log:**
@@ -436,7 +475,7 @@ jq -r 'select(.cwd | contains("/path/to/project")) | .rule' \
 
 ## Security Considerations
 
-> **NOTE on the request log**: The `PermissionRequest` hook fires when Claude *requests* permission, not after you respond. The request log (`permission-approvals.jsonl`) therefore captures all prompts including ones you denied. For a clean record of approved-and-executed operations, use the confirmed log (`confirmed-approvals.jsonl`) written by the `PostToolUse` hook. Run `sync-permissions.sh --from-confirmed` to sync only from confirmed approvals.
+> **NOTE on the request log**: The `PermissionRequest` hook fires when Claude *requests* permission, not after you respond. The request log (`permission-approvals.jsonl`) therefore captures all prompts including ones you denied. For a clean record of approved-and-executed operations, use the confirmed log (`confirmed-approvals.jsonl`) written by the `PostToolUse` hook. Run `permissionsync.sh sync --from-confirmed` to sync only from confirmed approvals.
 
 > **WARNING**: In worktree mode, any `.claude/settings.local.json` in a sibling worktree contributes to auto-approve decisions. A rule approved in one worktree will be auto-approved across all worktrees of the same repo.
 
