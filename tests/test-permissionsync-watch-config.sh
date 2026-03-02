@@ -9,8 +9,14 @@ FAIL=0
 TEST_NUM=0
 
 TMP_DIR="$(mktemp -d)"
+CANONICAL_SETTINGS="${TMP_DIR}/.claude/settings.json"
 CHANGES_LOG="${TMP_DIR}/.claude/config-changes.jsonl"
 trap 'rm -rf "$TMP_DIR"' EXIT
+
+# Ensure the .claude dir exists for canonical settings
+mkdir -p "${TMP_DIR}/.claude"
+
+HOOKS_DIR="${HOME}/.claude/hooks"
 
 assert_eq() {
 	local desc="$1" expected="$2" actual="$3"
@@ -40,6 +46,13 @@ assert_exit() {
 	fi
 }
 
+# Write a settings fixture to the canonical path the guard inspects ($HOME/.claude/settings.json).
+# The guard always reads from this path (never trusts file_path from stdin).
+write_canonical_settings() {
+	local content="$1"
+	printf '%s' "$content" >"$CANONICAL_SETTINGS"
+}
+
 run_hook() {
 	local source="$1" file_path="${2:-}" session="${3:-sess-test}" cwd="${4:-/tmp}"
 	local input
@@ -52,35 +65,100 @@ run_hook() {
 	HOME="$TMP_DIR" bash "${SCRIPT_DIR}/../permissionsync-watch-config.sh" <<<"$input"
 }
 
-# Settings file with both hooks present
-GOOD_SETTINGS="${TMP_DIR}/settings-good.json"
-jq -nc '{
-  "hooks": {
-    "PermissionRequest": [{"matcher":"*","hooks":[{"type":"command","command":"/home/user/.claude/hooks/log-permission-auto.sh"}]}],
-    "PostToolUse": [{"matcher":"*","hooks":[{"type":"command","command":"/home/user/.claude/hooks/log-confirmed.sh"}]}]
-  }
-}' >"$GOOD_SETTINGS"
+# Generate fixture JSON with all 5 hooks present (using $HOME/.claude/hooks/ paths)
+ALL_HOOKS_JSON=$(jq -nc \
+	--arg perm "${HOOKS_DIR}/permissionsync-log-permission-auto.sh" \
+	--arg post "${HOOKS_DIR}/permissionsync-log-confirmed.sh" \
+	--arg ptf "${HOOKS_DIR}/permissionsync-log-hook-errors.sh" \
+	--arg cc "${HOOKS_DIR}/permissionsync-watch-config.sh" \
+	--arg se "${HOOKS_DIR}/permissionsync-sync-on-end.sh" \
+	'{hooks: {
+		PermissionRequest: [{matcher:"*",hooks:[{type:"command",command:$perm}]}],
+		PostToolUse: [{matcher:"*",hooks:[{type:"command",command:$post}]}],
+		PostToolUseFailure: [{matcher:"*",hooks:[{type:"command",command:$ptf}]}],
+		ConfigChange: [{hooks:[{type:"command",command:$cc}]}],
+		SessionEnd: [{hooks:[{type:"command",command:$se}]}]
+	}}')
 
-# Settings file with PermissionRequest hook missing
-MISSING_PERMREQ="${TMP_DIR}/settings-no-permreq.json"
-jq -nc '{
-  "hooks": {
-    "PostToolUse": [{"matcher":"*","hooks":[{"type":"command","command":"/home/user/.claude/hooks/log-confirmed.sh"}]}]
-  }
-}' >"$MISSING_PERMREQ"
+# Generate fixture JSON with only PermissionRequest + PostToolUse (missing 3 new hooks)
+MISSING_NEW_HOOKS_JSON=$(jq -nc \
+	--arg perm "${HOOKS_DIR}/permissionsync-log-permission-auto.sh" \
+	--arg post "${HOOKS_DIR}/permissionsync-log-confirmed.sh" \
+	'{hooks: {
+		PermissionRequest: [{matcher:"*",hooks:[{type:"command",command:$perm}]}],
+		PostToolUse: [{matcher:"*",hooks:[{type:"command",command:$post}]}]
+	}}')
 
-# Settings file with PostToolUse hook missing
-MISSING_POSTUSE="${TMP_DIR}/settings-no-postuse.json"
-jq -nc '{
-  "hooks": {
-    "PermissionRequest": [{"matcher":"*","hooks":[{"type":"command","command":"/home/user/.claude/hooks/log-permission-auto.sh"}]}]
-  }
-}' >"$MISSING_POSTUSE"
+# Generate fixture JSON missing PermissionRequest only
+MISSING_PERMREQ_JSON=$(jq -nc \
+	--arg post "${HOOKS_DIR}/permissionsync-log-confirmed.sh" \
+	--arg ptf "${HOOKS_DIR}/permissionsync-log-hook-errors.sh" \
+	--arg cc "${HOOKS_DIR}/permissionsync-watch-config.sh" \
+	--arg se "${HOOKS_DIR}/permissionsync-sync-on-end.sh" \
+	'{hooks: {
+		PostToolUse: [{matcher:"*",hooks:[{type:"command",command:$post}]}],
+		PostToolUseFailure: [{matcher:"*",hooks:[{type:"command",command:$ptf}]}],
+		ConfigChange: [{hooks:[{type:"command",command:$cc}]}],
+		SessionEnd: [{hooks:[{type:"command",command:$se}]}]
+	}}')
+
+# Generate fixture JSON missing PostToolUse only
+MISSING_POSTUSE_JSON=$(jq -nc \
+	--arg perm "${HOOKS_DIR}/permissionsync-log-permission-auto.sh" \
+	--arg ptf "${HOOKS_DIR}/permissionsync-log-hook-errors.sh" \
+	--arg cc "${HOOKS_DIR}/permissionsync-watch-config.sh" \
+	--arg se "${HOOKS_DIR}/permissionsync-sync-on-end.sh" \
+	'{hooks: {
+		PermissionRequest: [{matcher:"*",hooks:[{type:"command",command:$perm}]}],
+		PostToolUseFailure: [{matcher:"*",hooks:[{type:"command",command:$ptf}]}],
+		ConfigChange: [{hooks:[{type:"command",command:$cc}]}],
+		SessionEnd: [{hooks:[{type:"command",command:$se}]}]
+	}}')
+
+# Generate fixture JSON missing PostToolUseFailure only
+MISSING_PTF_JSON=$(jq -nc \
+	--arg perm "${HOOKS_DIR}/permissionsync-log-permission-auto.sh" \
+	--arg post "${HOOKS_DIR}/permissionsync-log-confirmed.sh" \
+	--arg cc "${HOOKS_DIR}/permissionsync-watch-config.sh" \
+	--arg se "${HOOKS_DIR}/permissionsync-sync-on-end.sh" \
+	'{hooks: {
+		PermissionRequest: [{matcher:"*",hooks:[{type:"command",command:$perm}]}],
+		PostToolUse: [{matcher:"*",hooks:[{type:"command",command:$post}]}],
+		ConfigChange: [{hooks:[{type:"command",command:$cc}]}],
+		SessionEnd: [{hooks:[{type:"command",command:$se}]}]
+	}}')
+
+# Generate fixture JSON missing ConfigChange only
+MISSING_CC_JSON=$(jq -nc \
+	--arg perm "${HOOKS_DIR}/permissionsync-log-permission-auto.sh" \
+	--arg post "${HOOKS_DIR}/permissionsync-log-confirmed.sh" \
+	--arg ptf "${HOOKS_DIR}/permissionsync-log-hook-errors.sh" \
+	--arg se "${HOOKS_DIR}/permissionsync-sync-on-end.sh" \
+	'{hooks: {
+		PermissionRequest: [{matcher:"*",hooks:[{type:"command",command:$perm}]}],
+		PostToolUse: [{matcher:"*",hooks:[{type:"command",command:$post}]}],
+		PostToolUseFailure: [{matcher:"*",hooks:[{type:"command",command:$ptf}]}],
+		SessionEnd: [{hooks:[{type:"command",command:$se}]}]
+	}}')
+
+# Generate fixture JSON missing SessionEnd only
+MISSING_SE_JSON=$(jq -nc \
+	--arg perm "${HOOKS_DIR}/permissionsync-log-permission-auto.sh" \
+	--arg post "${HOOKS_DIR}/permissionsync-log-confirmed.sh" \
+	--arg ptf "${HOOKS_DIR}/permissionsync-log-hook-errors.sh" \
+	--arg cc "${HOOKS_DIR}/permissionsync-watch-config.sh" \
+	'{hooks: {
+		PermissionRequest: [{matcher:"*",hooks:[{type:"command",command:$perm}]}],
+		PostToolUse: [{matcher:"*",hooks:[{type:"command",command:$post}]}],
+		PostToolUseFailure: [{matcher:"*",hooks:[{type:"command",command:$ptf}]}],
+		ConfigChange: [{hooks:[{type:"command",command:$cc}]}]
+	}}')
 
 echo "TAP version 13"
 
 # --- Test 1: Non-user_settings source exits 0, no log ---
-run_hook "project_settings" "$GOOD_SETTINGS"
+write_canonical_settings "$ALL_HOOKS_JSON"
+run_hook "project_settings" "$CANONICAL_SETTINGS"
 exit_code=$?
 assert_exit "non-user_settings source exits 0" "0" "$exit_code"
 
@@ -88,9 +166,10 @@ log_lines=0
 [[ -f $CHANGES_LOG ]] && log_lines=$(wc -l <"$CHANGES_LOG" | tr -d ' ')
 assert_eq "non-user_settings source: no log entry" "0" "$log_lines"
 
-# --- Test 2: user_settings with intact hooks logs and exits 0 ---
+# --- Test 2: user_settings with all 5 hooks intact logs and exits 0 ---
+write_canonical_settings "$ALL_HOOKS_JSON"
 set +e
-run_hook "user_settings" "$GOOD_SETTINGS" 2>/dev/null
+run_hook "user_settings" "$CANONICAL_SETTINGS" 2>/dev/null
 exit_code=$?
 set -e
 assert_exit "user_settings intact hooks exits 0" "0" "$exit_code"
@@ -102,8 +181,9 @@ hooks_intact=$(jq -r '.hooks_intact' "$CHANGES_LOG")
 assert_eq "log entry has hooks_intact=true" "true" "$hooks_intact"
 
 # --- Test 3: user_settings with missing PermissionRequest hook exits 0 with stderr warning ---
+write_canonical_settings "$MISSING_PERMREQ_JSON"
 set +e
-stderr_out=$(run_hook "user_settings" "$MISSING_PERMREQ" 2>&1 >/dev/null)
+stderr_out=$(run_hook "user_settings" "$CANONICAL_SETTINGS" 2>&1 >/dev/null)
 exit_code=$?
 set -e
 assert_exit "missing PermissionRequest hook exits 0 (warn-only)" "0" "$exit_code"
@@ -118,8 +198,9 @@ else
 fi
 
 # --- Test 4: user_settings with missing PostToolUse hook exits 0 with stderr warning ---
+write_canonical_settings "$MISSING_POSTUSE_JSON"
 set +e
-stderr_out=$(run_hook "user_settings" "$MISSING_POSTUSE" 2>&1 >/dev/null)
+stderr_out=$(run_hook "user_settings" "$CANONICAL_SETTINGS" 2>&1 >/dev/null)
 exit_code=$?
 set -e
 assert_exit "missing PostToolUse hook exits 0 (warn-only)" "0" "$exit_code"
@@ -138,7 +219,7 @@ log_source=$(jq -r 'select(.hooks_intact == true) | .source' "$CHANGES_LOG")
 assert_eq "log entry has correct source" "user_settings" "$log_source"
 
 log_file=$(jq -r 'select(.hooks_intact == true) | .file_path' "$CHANGES_LOG")
-assert_eq "log entry has correct file_path" "$GOOD_SETTINGS" "$log_file"
+assert_eq "log entry has correct file_path (from stdin)" "$CANONICAL_SETTINGS" "$log_file"
 
 log_ts=$(jq -r 'select(.hooks_intact == true) | .timestamp' "$CHANGES_LOG")
 TEST_NUM=$((TEST_NUM + 1))
@@ -151,11 +232,65 @@ else
 fi
 
 # --- Test 6: Missing settings file exits 0 ---
+rm -f "$CANONICAL_SETTINGS"
 set +e
 run_hook "user_settings" "${TMP_DIR}/nonexistent-settings.json" 2>/dev/null
 exit_code=$?
 set -e
 assert_exit "missing settings file exits 0" "0" "$exit_code"
+# Restore canonical settings dir for remaining tests
+mkdir -p "${TMP_DIR}/.claude"
+
+# --- Test 7: missing PostToolUseFailure hook → HOOKS_INTACT=false ---
+write_canonical_settings "$MISSING_PTF_JSON"
+set +e
+stderr_out=$(run_hook "user_settings" "$CANONICAL_SETTINGS" 2>&1 >/dev/null)
+exit_code=$?
+set -e
+assert_exit "missing PostToolUseFailure hook exits 0 (warn-only)" "0" "$exit_code"
+
+TEST_NUM=$((TEST_NUM + 1))
+if echo "$stderr_out" | grep -q "WARNING"; then
+	echo "ok ${TEST_NUM} - missing PostToolUseFailure hook prints WARNING to stderr"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - missing PostToolUseFailure hook should print WARNING to stderr, got: '$stderr_out'"
+	FAIL=$((FAIL + 1))
+fi
+
+# --- Test 8: missing ConfigChange hook → HOOKS_INTACT=false ---
+write_canonical_settings "$MISSING_CC_JSON"
+set +e
+stderr_out=$(run_hook "user_settings" "$CANONICAL_SETTINGS" 2>&1 >/dev/null)
+exit_code=$?
+set -e
+assert_exit "missing ConfigChange hook exits 0 (warn-only)" "0" "$exit_code"
+
+TEST_NUM=$((TEST_NUM + 1))
+if echo "$stderr_out" | grep -q "WARNING"; then
+	echo "ok ${TEST_NUM} - missing ConfigChange hook prints WARNING to stderr"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - missing ConfigChange hook should print WARNING to stderr, got: '$stderr_out'"
+	FAIL=$((FAIL + 1))
+fi
+
+# --- Test 9: missing SessionEnd hook → HOOKS_INTACT=false ---
+write_canonical_settings "$MISSING_SE_JSON"
+set +e
+stderr_out=$(run_hook "user_settings" "$CANONICAL_SETTINGS" 2>&1 >/dev/null)
+exit_code=$?
+set -e
+assert_exit "missing SessionEnd hook exits 0 (warn-only)" "0" "$exit_code"
+
+TEST_NUM=$((TEST_NUM + 1))
+if echo "$stderr_out" | grep -q "WARNING"; then
+	echo "ok ${TEST_NUM} - missing SessionEnd hook prints WARNING to stderr"
+	PASS=$((PASS + 1))
+else
+	echo "not ok ${TEST_NUM} - missing SessionEnd hook should print WARNING to stderr, got: '$stderr_out'"
+	FAIL=$((FAIL + 1))
+fi
 
 echo "1..${TEST_NUM}"
 echo "# pass: ${PASS}"
