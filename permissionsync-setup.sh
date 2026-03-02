@@ -112,6 +112,9 @@ esac
 # replace previously-installed managed hook entries.
 # Old script name (log-permission.sh):
 MANAGED_LOG_CMD="$HOOKS_DIR/log-permission.sh"
+# v1 legacy script — not installed by either installer; eviction-list only.
+# Handles the edge case where a user manually wired it before it was deprecated.
+MANAGED_V1_CMD="$HOOKS_DIR/permissionsync-log-permission-v1.sh"
 # Old script name (log-permission-auto.sh):
 MANAGED_MODE_LOG_CMD="CLAUDE_PERMISSION_MODE=log $HOOKS_DIR/log-permission-auto.sh"
 MANAGED_AUTO_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
@@ -134,6 +137,7 @@ TEMP=$(mktemp)
 if ! jq \
 	--arg cmd "$HOOK_CMD" \
 	--arg managed_log "$MANAGED_LOG_CMD" \
+	--arg managed_v1 "$MANAGED_V1_CMD" \
 	--arg managed_mode_log "$MANAGED_MODE_LOG_CMD" \
 	--arg managed_auto "$MANAGED_AUTO_CMD" \
 	--arg managed_mode_auto "$MANAGED_MODE_AUTO_CMD" \
@@ -152,6 +156,7 @@ if ! jq \
             | map(
                 select(
                   (.command == $managed_log
+                   or .command == $managed_v1
                    or .command == $managed_mode_log
                    or .command == $managed_auto
                    or .command == $managed_mode_auto
