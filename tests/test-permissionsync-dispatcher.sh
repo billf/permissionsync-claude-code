@@ -83,7 +83,7 @@ DISPATCHER_COPY="${TMP_DIR}/permissionsync.sh"
 cp "$DISPATCHER" "$DISPATCHER_COPY"
 
 run_dispatcher() {
-	>"$INVOKED"
+	: >"$INVOKED"
 	bash "$DISPATCHER_COPY" "$@"
 }
 

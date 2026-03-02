@@ -99,7 +99,7 @@ LAUNCH_COPY="${BIN_DIR}/permissionsync-launch.sh"
 cp "$LAUNCH" "$LAUNCH_COPY"
 
 run_launch_from_tmp() {
-	>"$RECORDED_ARGS"
+	: >"$RECORDED_ARGS"
 	PATH="${TMP_DIR}:$PATH" bash "$LAUNCH_COPY" "$@"
 }
 

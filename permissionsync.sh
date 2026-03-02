@@ -50,7 +50,6 @@ cmd_status() {
 	local log_file="${CLAUDE_PERMISSION_LOG:-$HOME/.claude/permission-approvals.jsonl}"
 	local confirmed_log
 	confirmed_log="$(dirname "$log_file")/confirmed-approvals.jsonl"
-	local hooks_dir="$HOME/.claude/hooks"
 
 	echo "=== permissionsync-cc status ==="
 	echo ""
