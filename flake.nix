@@ -58,6 +58,7 @@
         overlays.default = final: prev: {
           permissionsync-cc = inputs.self.packages.${prev.system}.default;
         };
+        homeManagerModules.default = import ./nix/home-manager-module.nix;
       };
 
       perSystem = { config, self', inputs', pkgs, system, ... }:
