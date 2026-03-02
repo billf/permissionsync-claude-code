@@ -73,7 +73,7 @@ NEW_RULES=""
 ALL_RULES=""
 
 if [[ $INIT_BASE -eq 0 ]]; then
-	RULES_FROM_LOG=$(jq -r '.rule // empty' "$LOG_FILE" |
+	RULES_FROM_LOG=$(jq -r 'select((.rule // "") | test("[\n\r]") | not) | .rule // empty' "$LOG_FILE" |
 		grep -E '^(Bash\(.*\)|WebFetch(\(.*\))?|mcp__.*)$' |
 		filter_rules |
 		sort -u)
