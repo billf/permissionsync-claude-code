@@ -142,19 +142,19 @@ shift
 
 case "$SUBCOMMAND" in
 sync)
-	exec "${SCRIPT_DIR}/sync-permissions.sh" "$@"
+	exec "${SCRIPT_DIR}/permissionsync-sync.sh" "$@"
 	;;
 worktree)
-	exec "${SCRIPT_DIR}/worktree-sync.sh" "$@"
+	exec "${SCRIPT_DIR}/permissionsync-worktree-sync.sh" "$@"
 	;;
 settings)
-	exec "${SCRIPT_DIR}/merged-settings.sh" "$@"
+	exec "${SCRIPT_DIR}/permissionsync-settings.sh" "$@"
 	;;
 launch)
 	exec "${SCRIPT_DIR}/permissionsync-launch.sh" "$@"
 	;;
 install)
-	# Translate --mode=<value> to positional arg for install.sh
+	# Translate --mode=<value> to positional arg for permissionsync-install.sh
 	MODE_ARG=""
 	for arg in "$@"; do
 		case "$arg" in
@@ -173,9 +173,9 @@ install)
 		esac
 	done
 	if [[ -n $MODE_ARG ]]; then
-		exec "${SCRIPT_DIR}/install.sh" "$MODE_ARG"
+		exec "${SCRIPT_DIR}/permissionsync-install.sh" "$MODE_ARG"
 	else
-		exec "${SCRIPT_DIR}/install.sh"
+		exec "${SCRIPT_DIR}/permissionsync-install.sh"
 	fi
 	;;
 status)

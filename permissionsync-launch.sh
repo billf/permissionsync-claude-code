@@ -21,7 +21,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MERGED_SETTINGS="${SCRIPT_DIR}/merged-settings.sh"
+MERGED_SETTINGS="${SCRIPT_DIR}/permissionsync-settings.sh"
 
 usage() {
 	cat >&2 <<'USAGE'
@@ -85,7 +85,7 @@ if [[ -z $WORKTREE_NAME ]]; then
 fi
 
 if [[ ! -x $MERGED_SETTINGS ]]; then
-	echo "Error: merged-settings.sh not found at $MERGED_SETTINGS" >&2
+	echo "Error: permissionsync-settings.sh not found at $MERGED_SETTINGS" >&2
 	exit 1
 fi
 

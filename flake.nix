@@ -16,23 +16,23 @@
     let
       # Scripts that are entry points — these get wrapped with makeWrapper
       executableScripts = [
-        "log-permission.sh"
-        "log-permission-auto.sh"
-        "log-confirmed.sh"
-        "sync-permissions.sh"
-        "worktree-sync.sh"
-        "merged-settings.sh"
+        "permissionsync-log-permission-v1.sh"
+        "permissionsync-log-permission.sh"
+        "permissionsync-log-confirmed.sh"
+        "permissionsync-sync.sh"
+        "permissionsync-worktree-sync.sh"
+        "permissionsync-settings.sh"
         "permissionsync-launch.sh"
         "permissionsync.sh"
         "permissionsync-log-hook-errors.sh"
         "permissionsync-watch-config.sh"
         "permissionsync-sync-on-end.sh"
-        "session-start.sh"
-        "worktree-create.sh"
-        "setup-hooks.sh"
+        "permissionsync-session-start.sh"
+        "permissionsync-worktree-create.sh"
+        "permissionsync-setup.sh"
       ];
 
-      # Scripts that are sourced by others — must NOT be wrapped
+      # Library scripts — sourced only, installed to lib/ subdir, NOT in bin/
       libraryScripts = [
         "permissionsync-lib.sh"
         "permissionsync-config.sh"
@@ -43,7 +43,8 @@
         "generate-base-settings.sh"
       ];
 
-      allScripts = executableScripts ++ libraryScripts ++ buildScripts ++ [ "install.sh" ];
+      # Scripts copied to share/ (executables + build-time + installer)
+      shareScripts = executableScripts ++ buildScripts ++ [ "permissionsync-install.sh" ];
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [
@@ -84,27 +85,28 @@
             installPhase = ''
               runHook preInstall
 
-              # Raw (unwrapped) copies — used by setup-hooks.sh to cp into ~/.claude/hooks/
+              # Raw (unwrapped) copies — used by permissionsync-setup.sh to cp into ~/.claude/hooks/
               mkdir -p $out/share/permissionsync-cc
-              for s in ${builtins.concatStringsSep " " allScripts}; do
+              for s in ${builtins.concatStringsSep " " shareScripts}; do
                 cp "$src/$s" "$out/share/permissionsync-cc/$s"
                 chmod +x "$out/share/permissionsync-cc/$s"
               done
 
-              mkdir -p $out/bin
-
-              # Library scripts go into bin/ UNwrapped (they get source'd, not exec'd)
+              # Library scripts go to lib/ subdir — sourced only, NOT on PATH
+              mkdir -p $out/share/permissionsync-cc/lib
               for s in ${builtins.concatStringsSep " " libraryScripts}; do
-                cp "$src/$s" "$out/bin/$s"
-                chmod +x "$out/bin/$s"
+                cp "$src/lib/$s" "$out/share/permissionsync-cc/lib/$s"
               done
 
-              # Executable scripts get wrapped with runtime deps on PATH
+              mkdir -p $out/bin
+
+              # Executable scripts get wrapped with runtime deps on PATH and lib dir
               for s in ${builtins.concatStringsSep " " executableScripts}; do
                 cp "$src/$s" "$out/bin/$s"
                 chmod +x "$out/bin/$s"
                 wrapProgram "$out/bin/$s" \
-                  --prefix PATH : "${pkgs.lib.makeBinPath runtimeDeps}"
+                  --prefix PATH : "${pkgs.lib.makeBinPath runtimeDeps}" \
+                  --set PERMISSIONSYNC_LIB_DIR "$out/share/permissionsync-cc/lib"
               done
 
               # Generate base settings from claude-baseline readonly tiers
@@ -112,9 +114,9 @@
                 "${inputs.claude-baseline}" \
                 "$out/share/permissionsync-cc/base-settings.json"
 
-              # Patch setup-hooks.sh to find raw scripts in share/
+              # Patch permissionsync-setup.sh to find raw scripts in share/
               sed -i 's|PERMISSIONSYNC_SHARE_DIR=.*|PERMISSIONSYNC_SHARE_DIR="'"$out"'/share/permissionsync-cc"|' \
-                "$out/bin/.setup-hooks.sh-wrapped"
+                "$out/bin/.permissionsync-setup.sh-wrapped"
 
               runHook postInstall
             '';
@@ -122,7 +124,7 @@
             meta = {
               description = "Log and sync Claude Code permission approvals";
               license = pkgs.lib.licenses.mit;
-              mainProgram = "setup-hooks.sh";
+              mainProgram = "permissionsync-setup.sh";
             };
           };
 

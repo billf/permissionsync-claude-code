@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Read stdin (reason field) but don't use it — sync regardless
 true </dev/stdin
 
-SYNC="${SCRIPT_DIR}/sync-permissions.sh"
+SYNC="${SCRIPT_DIR}/permissionsync-sync.sh"
 if [[ -x $SYNC ]]; then
 	"$SYNC" --apply >/dev/null 2>&1 || true
 fi
