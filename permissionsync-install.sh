@@ -55,7 +55,7 @@ seed_baseline_permissions() {
 		"$settings" >"$tmp" && mv "$tmp" "$settings"
 
 	local count
-	count=$(echo "$rules_json" | jq 'length')
+	count=$(jq 'length' <<<"$rules_json")
 	echo "✓ Seeded $count baseline safe-subcommand rules into $settings"
 }
 
