@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # permissionsync-watch-config.sh: ConfigChange hook — guards permissionsync hook entries
 set -euo pipefail
+# ConfigChange is a blocking hook — any non-zero exit rejects the user's config change.
+# Trap all errors to ensure we always exit 0 (warn-only behavior).
+trap 'exit 0' ERR
 
 INPUT=$(</dev/stdin)
 eval "$(jq -r '@sh "SOURCE=\(.source // "") FILE_PATH=\(.file_path // "") SESSION_ID=\(.session_id // "") CWD=\(.cwd // "")"' <<<"$INPUT")"
