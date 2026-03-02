@@ -290,6 +290,27 @@ run_setup log >/dev/null
 assert_file_exists "creates settings.json.bak" \
 	"$TEST_HOME/.claude/settings.json.bak"
 
+# --- Test: backup reflects original pre-install content ---
+reset_home
+mkdir -p "$TEST_HOME/.claude"
+original_content='{"original": true}'
+echo "$original_content" >"$TEST_HOME/.claude/settings.json"
+run_setup log >/dev/null
+
+bak_content=$(cat "$TEST_HOME/.claude/settings.json.bak")
+assert_eq "backup reflects original pre-install content" "$original_content" "$bak_content"
+
+# --- Test: re-running setup does NOT overwrite existing backup ---
+reset_home
+mkdir -p "$TEST_HOME/.claude"
+echo '{"original": true}' >"$TEST_HOME/.claude/settings.json"
+run_setup log >/dev/null
+# Place a sentinel in the backup to verify it is not overwritten on second run
+echo '"sentinel"' >"$TEST_HOME/.claude/settings.json.bak"
+run_setup auto >/dev/null
+bak_after_rerun=$(cat "$TEST_HOME/.claude/settings.json.bak")
+assert_eq "second setup run does not overwrite existing backup" '"sentinel"' "$bak_after_rerun"
+
 # --- Summary ---
 echo ""
 echo "1..${TEST_NUM}"

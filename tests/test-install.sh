@@ -220,6 +220,27 @@ run_install
 allow_count_custom=$(jq '.permissions.allow | length' "$TEST_HOME/.claude/settings.json")
 assert_eq "pre-existing allow rules: seeding skipped (still 1 rule)" "1" "$allow_count_custom"
 
+# --- Test 12: backup is taken once before any modification ---
+reset_home
+mkdir -p "$TEST_HOME/.claude"
+original_content='{"original": true}'
+echo "$original_content" >"$TEST_HOME/.claude/settings.json"
+run_install
+
+bak_content=$(cat "$TEST_HOME/.claude/settings.json.bak")
+assert_eq "backup reflects original pre-install content" "$original_content" "$bak_content"
+
+# --- Test 13: re-running install does NOT overwrite existing backup ---
+reset_home
+mkdir -p "$TEST_HOME/.claude"
+echo '{"original": true}' >"$TEST_HOME/.claude/settings.json"
+run_install
+# Create a sentinel in the backup to verify it is not overwritten on second run
+echo '"sentinel"' >"$TEST_HOME/.claude/settings.json.bak"
+run_install --auto
+bak_after_rerun=$(cat "$TEST_HOME/.claude/settings.json.bak")
+assert_eq "second install run does not overwrite existing backup" '"sentinel"' "$bak_after_rerun"
+
 echo "1..${TEST_NUM}"
 echo "# pass: ${PASS}"
 echo "# fail: ${FAIL}"

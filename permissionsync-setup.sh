@@ -28,6 +28,11 @@ HOOKS_DIR="$HOME/.claude/hooks"
 SETTINGS="$HOME/.claude/settings.json"
 MODE="${1:-log}"
 
+# Temp file accumulator — cleaned up on any exit (normal, error, or signal).
+_TEMPS=()
+cleanup() { rm -f "${_TEMPS[@]}"; }
+trap cleanup EXIT
+
 # seed_baseline_permissions HOOKS_DIR SETTINGS
 #
 # Pre-seeds settings.json with curated safe-subcommand rules from config.
@@ -48,6 +53,8 @@ seed_baseline_permissions() {
 
 	local tmp
 	tmp=$(mktemp)
+	# shellcheck disable=SC2064
+	trap "rm -f '$tmp'" RETURN
 	jq --argjson rules "$rules_json" \
 		'.permissions //= {} | .permissions.allow //= [] | .permissions.allow += $rules | .permissions.allow |= unique | .permissions.allow |= sort' \
 		"$settings" >"$tmp" && mv "$tmp" "$settings"
@@ -133,7 +140,14 @@ if [[ ! -f $SETTINGS ]]; then
 	changed=1
 fi
 
+# Take one backup of the original settings before any modification.
+# Only created when the file exists and no backup has been taken yet.
+if [[ ! -f "${SETTINGS}.bak" ]]; then
+	cp "$SETTINGS" "${SETTINGS}.bak"
+fi
+
 TEMP=$(mktemp)
+_TEMPS+=("$TEMP")
 if ! jq \
 	--arg cmd "$HOOK_CMD" \
 	--arg managed_log "$MANAGED_LOG_CMD" \
@@ -182,7 +196,6 @@ if ! jq \
 fi
 
 if ! cmp -s "$SETTINGS" "$TEMP"; then
-	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
 	mv "$TEMP" "$SETTINGS"
 	changed=1
 else
@@ -194,6 +207,7 @@ fi
 CONFIRMED_CMD="$HOOKS_DIR/permissionsync-log-confirmed.sh"
 CONFIRMED_CMD_OLD="$HOOKS_DIR/log-confirmed.sh"
 TEMP2=$(mktemp)
+_TEMPS+=("$TEMP2")
 if ! jq \
 	--arg cmd "$CONFIRMED_CMD" \
 	--arg old_cmd "$CONFIRMED_CMD_OLD" '
@@ -215,7 +229,6 @@ if ! jq \
 	exit 1
 fi
 if ! cmp -s "$SETTINGS" "$TEMP2"; then
-	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
 	mv "$TEMP2" "$SETTINGS"
 	changed=1
 else
@@ -225,6 +238,7 @@ fi
 # 5. Wire PostToolUseFailure hook for hook-errors log (idempotent)
 ERRORS_CMD="$HOOKS_DIR/permissionsync-log-hook-errors.sh"
 TEMP3=$(mktemp)
+_TEMPS+=("$TEMP3")
 if ! jq \
 	--arg cmd "$ERRORS_CMD" '
     .hooks //= {} |
@@ -245,7 +259,6 @@ if ! jq \
 	exit 1
 fi
 if ! cmp -s "$SETTINGS" "$TEMP3"; then
-	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
 	mv "$TEMP3" "$SETTINGS"
 	changed=1
 else
@@ -255,6 +268,7 @@ fi
 # 6. Wire ConfigChange hook for config-changes log (idempotent)
 WATCH_CMD="$HOOKS_DIR/permissionsync-watch-config.sh"
 TEMP4=$(mktemp)
+_TEMPS+=("$TEMP4")
 if ! jq \
 	--arg cmd "$WATCH_CMD" '
     .hooks //= {} |
@@ -275,7 +289,6 @@ if ! jq \
 	exit 1
 fi
 if ! cmp -s "$SETTINGS" "$TEMP4"; then
-	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
 	mv "$TEMP4" "$SETTINGS"
 	changed=1
 else
@@ -285,6 +298,7 @@ fi
 # 7. Wire SessionEnd hook for auto-sync (idempotent)
 SYNCEND_CMD="$HOOKS_DIR/permissionsync-sync-on-end.sh"
 TEMP5=$(mktemp)
+_TEMPS+=("$TEMP5")
 if ! jq \
 	--arg cmd "$SYNCEND_CMD" '
     .hooks //= {} |
@@ -305,7 +319,6 @@ if ! jq \
 	exit 1
 fi
 if ! cmp -s "$SETTINGS" "$TEMP5"; then
-	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
 	mv "$TEMP5" "$SETTINGS"
 	changed=1
 else
@@ -317,6 +330,7 @@ fi
 SESSION_START_CMD="$HOOKS_DIR/permissionsync-session-start.sh"
 SESSION_START_CMD_OLD="$HOOKS_DIR/session-start.sh"
 TEMP6=$(mktemp)
+_TEMPS+=("$TEMP6")
 if ! jq \
 	--arg cmd "$SESSION_START_CMD" \
 	--arg old_cmd "$SESSION_START_CMD_OLD" '
@@ -337,7 +351,6 @@ if ! jq \
 	exit 1
 fi
 if ! cmp -s "$SETTINGS" "$TEMP6"; then
-	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
 	mv "$TEMP6" "$SETTINGS"
 	changed=1
 else
@@ -349,6 +362,7 @@ fi
 WORKTREE_CREATE_CMD="$HOOKS_DIR/permissionsync-worktree-create.sh"
 WORKTREE_CREATE_CMD_OLD="$HOOKS_DIR/worktree-create.sh"
 TEMP7=$(mktemp)
+_TEMPS+=("$TEMP7")
 if ! jq \
 	--arg cmd "$WORKTREE_CREATE_CMD" \
 	--arg old_cmd "$WORKTREE_CREATE_CMD_OLD" '
@@ -369,7 +383,6 @@ if ! jq \
 	exit 1
 fi
 if ! cmp -s "$SETTINGS" "$TEMP7"; then
-	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
 	mv "$TEMP7" "$SETTINGS"
 	changed=1
 else
