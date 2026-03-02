@@ -41,6 +41,20 @@ assert_file_exists() {
 	fi
 }
 
+assert_contains() {
+	local desc="$1" pattern="$2" actual="$3"
+	TEST_NUM=$((TEST_NUM + 1))
+	if echo "$actual" | grep -qF -- "$pattern"; then
+		echo "ok ${TEST_NUM} - ${desc}"
+		PASS=$((PASS + 1))
+	else
+		echo "not ok ${TEST_NUM} - ${desc}"
+		echo "#   expected to contain: '${pattern}'"
+		echo "#   actual:              '${actual}'"
+		FAIL=$((FAIL + 1))
+	fi
+}
+
 run_setup() {
 	local mode="${1:-log}"
 	HOME="$TEST_HOME" PERMISSIONSYNC_SHARE_DIR="${SCRIPT_DIR}/.." \
@@ -84,6 +98,25 @@ assert_eq "log mode: hook command uses CLAUDE_PERMISSION_MODE=log" \
 matcher=$(jq -r '.hooks.PermissionRequest[0].matcher' \
 	"$TEST_HOME/.claude/settings.json")
 assert_eq "log mode: matcher is wildcard" "*" "$matcher"
+
+# --- Test 2b: log mode installs all 6 secondary hooks ---
+ptu_cmd=$(jq -r '.hooks.PostToolUse[0].hooks[0].command' "$TEST_HOME/.claude/settings.json")
+assert_contains "log mode wires PostToolUse (log-confirmed)" "permissionsync-log-confirmed.sh" "$ptu_cmd"
+
+ptuf_cmd=$(jq -r '.hooks.PostToolUseFailure[0].hooks[0].command' "$TEST_HOME/.claude/settings.json")
+assert_contains "log mode wires PostToolUseFailure (log-hook-errors)" "permissionsync-log-hook-errors.sh" "$ptuf_cmd"
+
+cc_cmd=$(jq -r '.hooks.ConfigChange[0].hooks[0].command' "$TEST_HOME/.claude/settings.json")
+assert_contains "log mode wires ConfigChange (watch-config)" "permissionsync-watch-config.sh" "$cc_cmd"
+
+se_cmd=$(jq -r '.hooks.SessionEnd[0].hooks[0].command' "$TEST_HOME/.claude/settings.json")
+assert_contains "log mode wires SessionEnd (sync-on-end)" "permissionsync-sync-on-end.sh" "$se_cmd"
+
+ss_cmd=$(jq -r '.hooks.SessionStart[0].hooks[0].command' "$TEST_HOME/.claude/settings.json")
+assert_contains "log mode wires SessionStart (session-start)" "permissionsync-session-start.sh" "$ss_cmd"
+
+wc_cmd=$(jq -r '.hooks.WorktreeCreate[0].hooks[0].command' "$TEST_HOME/.claude/settings.json")
+assert_contains "log mode wires WorktreeCreate (worktree-create)" "permissionsync-worktree-create.sh" "$wc_cmd"
 
 # --- Test 3: First run reports changes (output includes installed message) ---
 TEST_NUM=$((TEST_NUM + 1))

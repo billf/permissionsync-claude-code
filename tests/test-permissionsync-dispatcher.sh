@@ -173,6 +173,33 @@ assert_contains "status shows permissionsync-cc header" "permissionsync-cc" "$ou
 assert_contains "status shows Hooks section" "Hooks:" "$output"
 assert_contains "status shows Settings section" "Settings" "$output"
 
+# --- Test 14: legacy worktree mode detection (CLAUDE_PERMISSION_WORKTREE=1) ---
+FAKE_HOME_WT=$(mktemp -d)
+mkdir -p "$FAKE_HOME_WT/.claude"
+jq -nc '{hooks:{PermissionRequest:[{matcher:"*",hooks:[{type:"command",command:"CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 /home/user/.claude/hooks/log-permission-auto.sh"}]}]}}' \
+	>"$FAKE_HOME_WT/.claude/settings.json"
+output_legacy_wt=$(HOME="$FAKE_HOME_WT" bash "$DISPATCHER_COPY" status 2>/dev/null)
+assert_contains "legacy worktree mode shown in status" "worktree (legacy" "$output_legacy_wt"
+rm -rf "$FAKE_HOME_WT"
+
+# --- Test 15: legacy auto mode detection (CLAUDE_PERMISSION_AUTO=1 without worktree) ---
+FAKE_HOME_AUTO=$(mktemp -d)
+mkdir -p "$FAKE_HOME_AUTO/.claude"
+jq -nc '{hooks:{PermissionRequest:[{matcher:"*",hooks:[{type:"command",command:"CLAUDE_PERMISSION_AUTO=1 /home/user/.claude/hooks/log-permission-auto.sh"}]}]}}' \
+	>"$FAKE_HOME_AUTO/.claude/settings.json"
+output_legacy_auto=$(HOME="$FAKE_HOME_AUTO" bash "$DISPATCHER_COPY" status 2>/dev/null)
+assert_contains "legacy auto mode shown in status" "auto (legacy" "$output_legacy_auto"
+rm -rf "$FAKE_HOME_AUTO"
+
+# --- Test 16: legacy log mode detection (bare log-permission.sh, no env vars) ---
+FAKE_HOME_LOG=$(mktemp -d)
+mkdir -p "$FAKE_HOME_LOG/.claude"
+jq -nc '{hooks:{PermissionRequest:[{matcher:"*",hooks:[{type:"command",command:"/home/user/.claude/hooks/log-permission.sh"}]}]}}' \
+	>"$FAKE_HOME_LOG/.claude/settings.json"
+output_legacy_log=$(HOME="$FAKE_HOME_LOG" bash "$DISPATCHER_COPY" status 2>/dev/null)
+assert_contains "legacy log mode shown in status" "log (legacy" "$output_legacy_log"
+rm -rf "$FAKE_HOME_LOG"
+
 echo "1..${TEST_NUM}"
 echo "# pass: ${PASS}"
 echo "# fail: ${FAIL}"
