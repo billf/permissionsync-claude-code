@@ -31,6 +31,18 @@ run_hook_mode() {
 		bash "${SCRIPT_DIR}/../permissionsync-log-permission.sh" <<<"$input"
 }
 
+run_hook_tool_mode() {
+	local tool_name="$1" tool_input_json="$2" mode="$3"
+	local input
+	input=$(jq -nc \
+		--arg tool "$tool_name" \
+		--argjson tool_input "$tool_input_json" \
+		--arg cwd "/tmp/repo" \
+		'{tool_name:$tool, tool_input:$tool_input, cwd:$cwd}')
+	CLAUDE_PERMISSION_LOG="$LOG_FILE" CLAUDE_PERMISSION_MODE="$mode" \
+		bash "${SCRIPT_DIR}/../permissionsync-log-permission.sh" <<<"$input"
+}
+
 assert_behavior() {
 	local desc="$1" expected="$2" output="$3"
 	TEST_NUM=$((TEST_NUM + 1))
@@ -141,6 +153,19 @@ assert_behavior "MODE=worktree: first-seen command falls through" "" "$out"
 out=$(run_hook_mode "curl new-cmd.com" "worktree")
 assert_behavior "MODE=worktree: previously-seen command auto-approved" "allow" "$out"
 
+# MODE=auto/worktree: specific non-parenthesized rules (mcp__*) replay
+rm -f "$LOG_FILE"
+out=$(run_hook_tool_mode "mcp__demo__lookup" '{}' "auto")
+assert_behavior "MODE=auto: first-seen mcp tool falls through" "" "$out"
+out=$(run_hook_tool_mode "mcp__demo__lookup" '{}' "auto")
+assert_behavior "MODE=auto: previously-seen mcp tool auto-approved" "allow" "$out"
+
+rm -f "$LOG_FILE"
+out=$(run_hook_tool_mode "mcp__demo__lookup" '{}' "worktree")
+assert_behavior "MODE=worktree: first-seen mcp tool falls through" "" "$out"
+out=$(run_hook_tool_mode "mcp__demo__lookup" '{}' "worktree")
+assert_behavior "MODE=worktree: previously-seen mcp tool auto-approved" "allow" "$out"
+
 # Legacy CLAUDE_PERMISSION_AUTO=1 still works when MODE not set
 rm -f "$LOG_FILE"
 out=$(run_hook "legacy-cmd" 1)
@@ -167,6 +192,27 @@ assert_log_field "safe subcommand: auto_approved=true in log" "3" "auto_approved
 rm -f "$LOG_FILE"
 run_hook_mode "some-cmd" "log" >/dev/null
 assert_log_field "MODE=log unsafe: auto_approved=false in log" "1" "auto_approved" "false"
+
+# --- Bare rule (RULE="Bash") never auto-approved ---
+# "bash script.sh" is blocklisted: binary="" → RULE="Bash" (no parens)
+# Must never be auto-approved, even after being seen before.
+rm -f "$LOG_FILE"
+
+out=$(run_hook "bash some-script.sh" 1)
+assert_behavior "bare Bash rule: first-seen not auto-approved" "" "$out"
+assert_log_lines "bare Bash rule: first invocation logged" "1"
+
+out=$(run_hook "bash some-script.sh" 1)
+assert_behavior "bare Bash rule: second-seen still not auto-approved" "" "$out"
+assert_log_lines "bare Bash rule: second invocation logged" "2"
+
+# A different bash invocation also not auto-approved (same bare "Bash" rule)
+out=$(run_hook "bash another-script.sh" 1)
+assert_behavior "bare Bash rule: different script still not auto-approved" "" "$out"
+
+# Safe subcommand still works despite bare-rule guard being separate path
+out=$(run_hook "git status" 1)
+assert_behavior "safe subcommand unaffected by bare-rule guard" "allow" "$out"
 
 echo "1..${TEST_NUM}"
 echo "# pass: ${PASS}"

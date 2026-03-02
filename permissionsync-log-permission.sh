@@ -52,6 +52,20 @@ auto)
 *) ;;
 esac
 
+# is_coarse_bare_rule RULE → 0 if RULE is a broad bare matcher that should
+# never be auto-approved from history/worktree replay.
+# Exact non-parenthesized rules (e.g. mcp__server__tool) are allowed.
+is_coarse_bare_rule() {
+	case "$1" in
+	Bash | Read | Write | Edit | MultiEdit | WebFetch)
+		return 0
+		;;
+	*)
+		return 1
+		;;
+	esac
+}
+
 INPUT=$(</dev/stdin)
 
 # Parse all fields in a single jq call to minimize subprocess overhead
@@ -64,7 +78,9 @@ build_rule_v2 "$TOOL_NAME" "$TOOL_INPUT"
 
 # --- Snapshot whether this rule existed before this invocation ---
 SEEN_BEFORE=0
-if [[ $AUTO_MODE == "1" ]] && [[ -f $LOG_FILE ]]; then
+# Only check history for specific rules.
+# Coarse bare rules like "Bash" and "Read" are too broad for replay.
+if [[ $AUTO_MODE == "1" ]] && [[ -f $LOG_FILE ]] && ! is_coarse_bare_rule "$RULE"; then
 	if grep -qF "\"rule\":\"${RULE}\"" "$LOG_FILE" 2>/dev/null; then
 		SEEN_BEFORE=1
 	fi
@@ -87,6 +103,13 @@ fi
 # Auto-approve mode: if this rule was previously seen, allow it
 if [[ $AUTO_APPROVED == "false" ]] && [[ $AUTO_MODE == "1" ]] && [[ $SEEN_BEFORE -eq 1 ]]; then
 	AUTO_APPROVED="true"
+fi
+
+# Safety net: never auto-approve coarse bare rules.
+# "Bash" groups ALL unclassifiable commands (blocked interpreters, shell keywords,
+# invalid syntax), and file-tool bare rules are broad across all paths.
+if is_coarse_bare_rule "$RULE"; then
+	AUTO_APPROVED="false"
 fi
 
 # --- Log the request with the decision ---
