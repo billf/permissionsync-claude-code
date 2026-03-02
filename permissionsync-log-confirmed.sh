@@ -21,8 +21,11 @@ CONFIRMED_LOG="$(dirname "$BASE_LOG")/confirmed-approvals.jsonl"
 
 INPUT=$(</dev/stdin)
 
-# Parse fields in a single jq call
-eval "$(jq -r '@sh "TOOL_NAME=\(.tool_name // "") TOOL_INPUT=\(.tool_input // {} | tostring) CWD=\(.cwd // "") SESSION_ID=\(.session_id // "")"' <<<"$INPUT")"
+# Parse fields with separate jq calls (avoids eval injection surface)
+TOOL_NAME=$(jq -r '.tool_name // empty' <<<"$INPUT")
+TOOL_INPUT=$(jq -r '.tool_input // {} | tostring' <<<"$INPUT")
+CWD=$(jq -r '.cwd // empty' <<<"$INPUT")
+SESSION_ID=$(jq -r '.session_id // empty' <<<"$INPUT")
 
 [[ -z $TOOL_NAME ]] && exit 0
 
