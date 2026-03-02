@@ -70,8 +70,10 @@ is_never_auto_rule() {
 
 INPUT=$(</dev/stdin)
 
-# Parse all fields in a single jq call to minimize subprocess overhead
-eval "$(jq -r '@sh "TOOL_NAME=\(.tool_name // "") TOOL_INPUT=\(.tool_input // {} | tostring) CWD=\(.cwd // "")"' <<<"$INPUT")"
+# Parse fields with separate jq calls (avoids eval injection surface)
+TOOL_NAME=$(jq -r '.tool_name // empty' <<<"$INPUT")
+TOOL_INPUT=$(jq -r '.tool_input // {} | tostring' <<<"$INPUT")
+CWD=$(jq -r '.cwd // empty' <<<"$INPUT")
 
 [[ -z $TOOL_NAME ]] && exit 0
 
