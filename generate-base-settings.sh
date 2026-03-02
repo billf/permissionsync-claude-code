@@ -13,8 +13,8 @@ BASELINE_SRC="$1"
 OUTPUT_PATH="$2"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=permissionsync-config.sh
-source "${SCRIPT_DIR}/permissionsync-config.sh"
+# shellcheck source=lib/permissionsync-config.sh
+source "${PERMISSIONSYNC_LIB_DIR:-$SCRIPT_DIR/lib}/permissionsync-config.sh"
 
 # Collect stacks that have a "readonly" tier (excluding "bash" for security —
 # it contains Bash(find *) which enables find -exec arbitrary code execution)

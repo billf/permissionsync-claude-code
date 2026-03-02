@@ -11,8 +11,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=permissionsync-lib.sh
-source "${SCRIPT_DIR}/permissionsync-lib.sh"
+# shellcheck source=lib/permissionsync-lib.sh
+source "${PERMISSIONSYNC_LIB_DIR:-$SCRIPT_DIR/lib}/permissionsync-lib.sh"
 
 LOG_FILE="${CLAUDE_PERMISSION_LOG:-$HOME/.claude/permission-approvals.jsonl}"
 INPUT=$(</dev/stdin)

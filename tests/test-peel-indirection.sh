@@ -3,8 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=../permissionsync-lib.sh
-source "${SCRIPT_DIR}/../permissionsync-lib.sh"
+# shellcheck source=../lib/permissionsync-lib.sh
+source "${SCRIPT_DIR}/../lib/permissionsync-lib.sh"
 
 PASS=0
 FAIL=0

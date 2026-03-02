@@ -97,7 +97,7 @@ get_safe_subcommands() {
 # (read-only display and search tools with no write capabilities)
 is_always_safe_binary() {
 	case "$1" in
-	fd | rg | bat | delta | difftastic)
+	bat | delta | difftastic)
 		return 0
 		;;
 	*)
@@ -113,7 +113,7 @@ get_all_tracked_binaries() {
 
 # get_all_always_safe_binaries → space-separated list of always-safe binaries
 get_all_always_safe_binaries() {
-	echo "fd rg bat delta difftastic"
+	echo "bat delta difftastic"
 }
 
 # get_indirection_type WORD → peeling type or empty string

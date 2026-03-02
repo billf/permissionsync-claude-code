@@ -3,8 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=../permissionsync-lib.sh
-source "${SCRIPT_DIR}/../permissionsync-lib.sh"
+# shellcheck source=../lib/permissionsync-lib.sh
+source "${SCRIPT_DIR}/../lib/permissionsync-lib.sh"
 # Source sync-permissions.sh functions by extracting filter_rules
 # (sync-permissions.sh is a script, not just a library — we source the lib
 # and redefine filter_rules inline to test it in isolation)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup-hooks.sh — idempotent hook installer for use in Nix flake shellHooks
+# permissionsync-setup.sh — idempotent hook installer for use in Nix flake shellHooks
 #
 # Copies permissionsync-cc scripts to ~/.claude/hooks/ and ensures the
 # PermissionRequest hook is configured in ~/.claude/settings.json.
@@ -9,19 +9,21 @@
 # changes.
 #
 # Usage:
-#   setup-hooks.sh              # log-only mode (default)
-#   setup-hooks.sh auto         # auto-approve previously-seen rules
-#   setup-hooks.sh worktree     # auto-approve + sibling worktree rules
+#   permissionsync-setup.sh              # log-only mode (default)
+#   permissionsync-setup.sh auto         # auto-approve previously-seen rules
+#   permissionsync-setup.sh worktree     # auto-approve + sibling worktree rules
 #
 # When called from a Nix flake shellHook:
-#   ${psc}/bin/setup-hooks.sh            # log mode
-#   ${psc}/bin/setup-hooks.sh auto       # auto mode
-#   ${psc}/bin/setup-hooks.sh worktree   # worktree mode
+#   ${psc}/bin/permissionsync-setup.sh            # log mode
+#   ${psc}/bin/permissionsync-setup.sh auto       # auto mode
+#   ${psc}/bin/permissionsync-setup.sh worktree   # worktree mode
 
 set -euo pipefail
 
 # PERMISSIONSYNC_SHARE_DIR is patched by Nix to point to $out/share/permissionsync-cc
 PERMISSIONSYNC_SHARE_DIR="${PERMISSIONSYNC_SHARE_DIR:-$(cd "$(dirname "$0")" && pwd)}"
+# PERMISSIONSYNC_LIB_DIR is patched by Nix to point to $out/share/permissionsync-cc/lib
+PERMISSIONSYNC_LIB_DIR="${PERMISSIONSYNC_LIB_DIR:-$PERMISSIONSYNC_SHARE_DIR/lib}"
 HOOKS_DIR="$HOME/.claude/hooks"
 SETTINGS="$HOME/.claude/settings.json"
 MODE="${1:-log}"
@@ -32,8 +34,8 @@ MODE="${1:-log}"
 # Idempotent: skips if permissions.allow already has any entries.
 seed_baseline_permissions() {
 	local hooks_dir="$1" settings="$2"
-	# shellcheck source=permissionsync-lib.sh
-	source "${hooks_dir}/permissionsync-lib.sh"
+	# shellcheck source=lib/permissionsync-lib.sh
+	source "${hooks_dir}/lib/permissionsync-lib.sh"
 
 	local existing_count
 	existing_count=$(jq '.permissions.allow | length' "$settings" 2>/dev/null || echo 0)
@@ -56,27 +58,36 @@ seed_baseline_permissions() {
 }
 
 SCRIPTS=(
-	permissionsync-config.sh
-	permissionsync-lib.sh
-	log-permission.sh
-	log-permission-auto.sh
-	log-confirmed.sh
-	sync-permissions.sh
-	worktree-sync.sh
-	merged-settings.sh
+	# log-permission-v1.sh (formerly log-permission.sh) not installed — eviction-list only
+	permissionsync-log-permission.sh
+	permissionsync-log-confirmed.sh
+	permissionsync-sync.sh
+	permissionsync-worktree-sync.sh
+	permissionsync-settings.sh
 	permissionsync-launch.sh
 	permissionsync.sh
 	permissionsync-log-hook-errors.sh
 	permissionsync-watch-config.sh
 	permissionsync-sync-on-end.sh
-	session-start.sh
-	worktree-create.sh
+	permissionsync-session-start.sh
+	permissionsync-worktree-create.sh
+)
+
+LIB_SCRIPTS=(
+	permissionsync-lib.sh
+	permissionsync-config.sh
 )
 
 changed=0
 
-# 1. Copy hook scripts (only when changed)
-mkdir -p "$HOOKS_DIR"
+# 1. Copy hook scripts and shared libraries (only when changed)
+mkdir -p "$HOOKS_DIR" "$HOOKS_DIR/lib"
+for s in "${LIB_SCRIPTS[@]}"; do
+	if ! cmp -s "$PERMISSIONSYNC_LIB_DIR/$s" "$HOOKS_DIR/lib/$s" 2>/dev/null; then
+		cp "$PERMISSIONSYNC_LIB_DIR/$s" "$HOOKS_DIR/lib/$s"
+		changed=1
+	fi
+done
 for s in "${SCRIPTS[@]}"; do
 	if ! cmp -s "$PERMISSIONSYNC_SHARE_DIR/$s" "$HOOKS_DIR/$s" 2>/dev/null; then
 		cp "$PERMISSIONSYNC_SHARE_DIR/$s" "$HOOKS_DIR/$s"
@@ -88,23 +99,29 @@ done
 # 2. Determine hook command based on mode
 case "$MODE" in
 auto)
-	HOOK_CMD="CLAUDE_PERMISSION_MODE=auto $HOOKS_DIR/log-permission-auto.sh"
+	HOOK_CMD="CLAUDE_PERMISSION_MODE=auto $HOOKS_DIR/permissionsync-log-permission.sh"
 	;;
 worktree)
-	HOOK_CMD="CLAUDE_PERMISSION_MODE=worktree $HOOKS_DIR/log-permission-auto.sh"
+	HOOK_CMD="CLAUDE_PERMISSION_MODE=worktree $HOOKS_DIR/permissionsync-log-permission.sh"
 	;;
 *)
-	HOOK_CMD="CLAUDE_PERMISSION_MODE=log $HOOKS_DIR/log-permission-auto.sh"
+	HOOK_CMD="CLAUDE_PERMISSION_MODE=log $HOOKS_DIR/permissionsync-log-permission.sh"
 	;;
 esac
-# All managed command patterns (legacy and new-style) — used to identify and
+# All managed command patterns (legacy and current) — used to identify and
 # replace previously-installed managed hook entries.
+# Old script name (log-permission.sh):
 MANAGED_LOG_CMD="$HOOKS_DIR/log-permission.sh"
+# Old script name (log-permission-auto.sh):
 MANAGED_MODE_LOG_CMD="CLAUDE_PERMISSION_MODE=log $HOOKS_DIR/log-permission-auto.sh"
 MANAGED_AUTO_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
 MANAGED_MODE_AUTO_CMD="CLAUDE_PERMISSION_MODE=auto $HOOKS_DIR/log-permission-auto.sh"
 MANAGED_WORKTREE_CMD="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
 MANAGED_MODE_WORKTREE_CMD="CLAUDE_PERMISSION_MODE=worktree $HOOKS_DIR/log-permission-auto.sh"
+# Current script name (permissionsync-log-permission.sh):
+MANAGED_NEW_MODE_LOG_CMD="CLAUDE_PERMISSION_MODE=log $HOOKS_DIR/permissionsync-log-permission.sh"
+MANAGED_NEW_MODE_AUTO_CMD="CLAUDE_PERMISSION_MODE=auto $HOOKS_DIR/permissionsync-log-permission.sh"
+MANAGED_NEW_MODE_WORKTREE_CMD="CLAUDE_PERMISSION_MODE=worktree $HOOKS_DIR/permissionsync-log-permission.sh"
 
 # 3. Ensure settings.json has the PermissionRequest hook entry
 if [[ ! -f $SETTINGS ]]; then
@@ -121,7 +138,10 @@ if ! jq \
 	--arg managed_auto "$MANAGED_AUTO_CMD" \
 	--arg managed_mode_auto "$MANAGED_MODE_AUTO_CMD" \
 	--arg managed_worktree "$MANAGED_WORKTREE_CMD" \
-	--arg managed_mode_worktree "$MANAGED_MODE_WORKTREE_CMD" '
+	--arg managed_mode_worktree "$MANAGED_MODE_WORKTREE_CMD" \
+	--arg managed_new_mode_log "$MANAGED_NEW_MODE_LOG_CMD" \
+	--arg managed_new_mode_auto "$MANAGED_NEW_MODE_AUTO_CMD" \
+	--arg managed_new_mode_worktree "$MANAGED_NEW_MODE_WORKTREE_CMD" '
     .hooks //= {} |
     .hooks.PermissionRequest //= [] |
     .hooks.PermissionRequest = (
@@ -136,7 +156,10 @@ if ! jq \
                    or .command == $managed_auto
                    or .command == $managed_mode_auto
                    or .command == $managed_worktree
-                   or .command == $managed_mode_worktree)
+                   or .command == $managed_mode_worktree
+                   or .command == $managed_new_mode_log
+                   or .command == $managed_new_mode_auto
+                   or .command == $managed_new_mode_worktree)
                   | not
                 )
               )
@@ -162,16 +185,19 @@ else
 fi
 
 # 4. Wire PostToolUse hook for confirmed-approvals log (idempotent)
-CONFIRMED_CMD="$HOOKS_DIR/log-confirmed.sh"
+# Evicts old name (log-confirmed.sh) and current name before re-adding current.
+CONFIRMED_CMD="$HOOKS_DIR/permissionsync-log-confirmed.sh"
+CONFIRMED_CMD_OLD="$HOOKS_DIR/log-confirmed.sh"
 TEMP2=$(mktemp)
 if ! jq \
-	--arg cmd "$CONFIRMED_CMD" '
+	--arg cmd "$CONFIRMED_CMD" \
+	--arg old_cmd "$CONFIRMED_CMD_OLD" '
     .hooks //= {} |
     .hooks.PostToolUse //= [] |
     .hooks.PostToolUse = (
       [
         .hooks.PostToolUse[]
-        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd and .command != $old_cmd)))
         | select((.hooks | length) > 0)
       ] + [{
         matcher: "*",
@@ -282,16 +308,19 @@ else
 fi
 
 # 8. Wire SessionStart hook for drift notification (idempotent)
-SESSION_START_CMD="$HOOKS_DIR/session-start.sh"
+# Evicts old name (session-start.sh) and current name before re-adding current.
+SESSION_START_CMD="$HOOKS_DIR/permissionsync-session-start.sh"
+SESSION_START_CMD_OLD="$HOOKS_DIR/session-start.sh"
 TEMP6=$(mktemp)
 if ! jq \
-	--arg cmd "$SESSION_START_CMD" '
+	--arg cmd "$SESSION_START_CMD" \
+	--arg old_cmd "$SESSION_START_CMD_OLD" '
     .hooks //= {} |
     .hooks.SessionStart //= [] |
     .hooks.SessionStart = (
       [
         .hooks.SessionStart[]
-        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd and .command != $old_cmd)))
         | select((.hooks | length) > 0)
       ] + [{
         hooks: [{type: "command", command: $cmd}]
@@ -311,16 +340,19 @@ else
 fi
 
 # 9. Wire WorktreeCreate hook for settings seeding (idempotent)
-WORKTREE_CREATE_CMD="$HOOKS_DIR/worktree-create.sh"
+# Evicts old name (worktree-create.sh) and current name before re-adding current.
+WORKTREE_CREATE_CMD="$HOOKS_DIR/permissionsync-worktree-create.sh"
+WORKTREE_CREATE_CMD_OLD="$HOOKS_DIR/worktree-create.sh"
 TEMP7=$(mktemp)
 if ! jq \
-	--arg cmd "$WORKTREE_CREATE_CMD" '
+	--arg cmd "$WORKTREE_CREATE_CMD" \
+	--arg old_cmd "$WORKTREE_CREATE_CMD_OLD" '
     .hooks //= {} |
     .hooks.WorktreeCreate //= [] |
     .hooks.WorktreeCreate = (
       [
         .hooks.WorktreeCreate[]
-        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd and .command != $old_cmd)))
         | select((.hooks | length) > 0)
       ] + [{
         hooks: [{type: "command", command: $cmd}]

@@ -80,7 +80,7 @@ NO_GIT="${TMP_DIR}/not-a-repo"
 mkdir -p "$NO_GIT"
 
 # Source the library from the project root
-source "${SCRIPT_DIR}/../permissionsync-lib.sh"
+source "${SCRIPT_DIR}/../lib/permissionsync-lib.sh"
 
 # ============================================================
 # is_in_worktree tests

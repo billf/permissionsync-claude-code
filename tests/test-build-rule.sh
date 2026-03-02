@@ -3,8 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=../permissionsync-lib.sh
-source "${SCRIPT_DIR}/../permissionsync-lib.sh"
+# shellcheck source=../lib/permissionsync-lib.sh
+source "${SCRIPT_DIR}/../lib/permissionsync-lib.sh"
 
 PASS=0
 FAIL=0
@@ -292,13 +292,14 @@ assert_rule "Bash" '{"command":"nix eval .#something"}' \
 assert_rule "Bash" '{"command":"nix develop"}' \
 	"Bash(nix develop *)" "nix develop" "false" ""
 
-# --- Always-safe binaries: IS_SAFE=true regardless of args ---
+# --- Non-tracked executors are never auto-safe ---
 assert_rule "Bash" '{"command":"fd . --type f"}' \
-	"Bash(fd *)" "fd" "true" ""
+	"Bash(fd *)" "fd" "false" ""
 
 assert_rule "Bash" '{"command":"rg --hidden pattern src/"}' \
-	"Bash(rg *)" "rg" "true" ""
+	"Bash(rg *)" "rg" "false" ""
 
+# --- Always-safe binaries: IS_SAFE=true regardless of args ---
 assert_rule "Bash" '{"command":"bat src/main.rs"}' \
 	"Bash(bat *)" "bat" "true" ""
 
@@ -309,8 +310,8 @@ assert_rule "Bash" '{"command":"difftastic old.rs new.rs"}' \
 	"Bash(difftastic *)" "difftastic" "true" ""
 
 # Always-safe binaries: metacharacters should still prevent IS_SAFE
-assert_rule "Bash" '{"command":"rg foo | head"}' \
-	"Bash(rg *)" "rg" "false" ""
+assert_rule "Bash" '{"command":"bat src/main.rs | head"}' \
+	"Bash(bat *)" "bat" "false" ""
 
 # --- New tracked binaries: compound key rules ---
 assert_rule "Bash" '{"command":"rustup show"}' \

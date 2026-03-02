@@ -3,8 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=../permissionsync-lib.sh
-source "${SCRIPT_DIR}/../permissionsync-lib.sh"
+# shellcheck source=../lib/permissionsync-lib.sh
+source "${SCRIPT_DIR}/../lib/permissionsync-lib.sh"
 
 PASS=0
 FAIL=0
@@ -300,11 +300,11 @@ assert_not_always_safe() {
 	fi
 }
 
-assert_always_safe "fd"
-assert_always_safe "rg"
 assert_always_safe "bat"
 assert_always_safe "delta"
 assert_always_safe "difftastic"
+assert_not_always_safe "fd"
+assert_not_always_safe "rg"
 assert_not_always_safe "git"
 assert_not_always_safe "rm"
 assert_not_always_safe "curl"
