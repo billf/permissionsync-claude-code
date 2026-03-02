@@ -11,7 +11,9 @@ eval "$(jq -r '@sh "SOURCE=\(.source // "") FILE_PATH=\(.file_path // "") SESSIO
 # Only act on user_settings changes
 [[ $SOURCE != "user_settings" ]] && exit 0
 
-SETTINGS_PATH="${FILE_PATH:-$HOME/.claude/settings.json}"
+# Always inspect the canonical settings path — do not trust file_path from stdin for guard logic.
+# FILE_PATH from stdin is recorded in the audit log only.
+SETTINGS_PATH="$HOME/.claude/settings.json"
 BASE_LOG="${CLAUDE_PERMISSION_LOG:-$HOME/.claude/permission-approvals.jsonl}"
 CHANGES_LOG="$(dirname "$BASE_LOG")/config-changes.jsonl"
 
@@ -34,11 +36,11 @@ if [[ $has_permreq -eq 0 ]] || [[ $has_postuse -eq 0 ]] || \
 	HOOKS_INTACT=false
 fi
 
-# Log the change
+# Log the change (file_path records what Claude was changing, from stdin)
 mkdir -p "$(dirname "$CHANGES_LOG")"
 jq -nc \
 	--arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-	--arg source "$SOURCE" --arg file_path "$SETTINGS_PATH" \
+	--arg source "$SOURCE" --arg file_path "$FILE_PATH" \
 	--argjson hooks_intact "$HOOKS_INTACT" \
 	--arg session "$SESSION_ID" --arg cwd "$CWD" \
 	'{timestamp:$ts, source:$source, file_path:$file_path, hooks_intact:$hooks_intact, session_id:$session, cwd:$cwd}' \
