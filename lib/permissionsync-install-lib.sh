@@ -82,6 +82,6 @@ seed_baseline_permissions() {
 	mv "$tmp" "$settings"
 
 	local count
-	count=$(echo "$rules_json" | jq 'length')
+	count=$(jq 'length' <<<"$rules_json")
 	echo "permissionsync-cc: seeded $count baseline rules into $settings"
 }

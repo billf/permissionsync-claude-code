@@ -5,7 +5,7 @@
 # Output (stdout): absolute worktree path (required by Claude Code)
 set -euo pipefail
 
-INPUT=$(cat)
+INPUT=$(</dev/stdin)
 WORKTREE_PATH=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
 [[ -z $WORKTREE_PATH ]] && exit 1
 

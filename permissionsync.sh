@@ -67,9 +67,9 @@ cmd_status() {
 				# Detect old-style env vars (pre-CLAUDE_PERMISSION_MODE installs)
 				old_cmd=$(jq -r '.hooks.PermissionRequest[]?.hooks[]?.command // empty' "$settings" 2>/dev/null |
 					grep 'log-permission' | head -1 || true)
-				if echo "$old_cmd" | grep -q 'CLAUDE_PERMISSION_WORKTREE'; then
+				if [[ $old_cmd == *CLAUDE_PERMISSION_WORKTREE* ]]; then
 					mode="worktree (legacy — re-run installer to upgrade)"
-				elif echo "$old_cmd" | grep -q 'CLAUDE_PERMISSION_AUTO'; then
+				elif [[ $old_cmd == *CLAUDE_PERMISSION_AUTO* ]]; then
 					mode="auto (legacy — re-run installer to upgrade)"
 				else
 					mode="log (legacy — re-run installer to upgrade)"
