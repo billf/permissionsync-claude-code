@@ -74,6 +74,9 @@ esac
 # Listed here so any previously-installed variant is evicted on re-install.
 # Old script name (log-permission.sh):
 MANAGED_LOG_CMD="$HOOKS_DIR/log-permission.sh"
+# v1 legacy script — not installed by either installer; eviction-list only.
+# Handles the edge case where a user manually wired it before it was deprecated.
+MANAGED_V1_CMD="$HOOKS_DIR/permissionsync-log-permission-v1.sh"
 # Old script name (log-permission-auto.sh):
 MANAGED_MODE_LOG_CMD="CLAUDE_PERMISSION_MODE=log $HOOKS_DIR/log-permission-auto.sh"
 MANAGED_AUTO_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
@@ -92,7 +95,7 @@ fi
 
 # 4. Wire all hooks (each call evicts legacy names then adds current)
 if wire_hook "PermissionRequest" "$HOOK_CMD" "*" "permission logger" \
-	"$MANAGED_LOG_CMD" "$MANAGED_MODE_LOG_CMD" \
+	"$MANAGED_LOG_CMD" "$MANAGED_V1_CMD" "$MANAGED_MODE_LOG_CMD" \
 	"$MANAGED_AUTO_CMD" "$MANAGED_MODE_AUTO_CMD" \
 	"$MANAGED_WORKTREE_CMD" "$MANAGED_MODE_WORKTREE_CMD" \
 	"$MANAGED_NEW_MODE_LOG_CMD" "$MANAGED_NEW_MODE_AUTO_CMD" \

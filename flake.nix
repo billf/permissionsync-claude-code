@@ -15,8 +15,13 @@
   outputs = inputs@{ flake-parts, ... }:
     let
       # Scripts that are entry points — these get wrapped with makeWrapper
+      # Note: permissionsync-log-permission-v1.sh is intentionally excluded here.
+      # It is kept in the repo as historical documentation only. It is never wired
+      # by either installer; users who want log-only mode use
+      # CLAUDE_PERMISSION_MODE=log with permissionsync-log-permission.sh instead.
+      # Both installers list it in their MANAGED_ eviction sets to handle the edge
+      # case of a user who manually wired it.
       executableScripts = [
-        "permissionsync-log-permission-v1.sh"
         "permissionsync-log-permission.sh"
         "permissionsync-log-confirmed.sh"
         "permissionsync-sync.sh"
