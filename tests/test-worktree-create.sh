@@ -52,6 +52,8 @@ run_hook() {
 REPO_DIR="${TMP_DIR}/repo"
 WORKTREE_DIR="${TMP_DIR}/worktree-test-wt"
 git init -q "$REPO_DIR"
+git -C "$REPO_DIR" config user.email "test@test.com"
+git -C "$REPO_DIR" config user.name "Test"
 git -C "$REPO_DIR" commit --allow-empty -q -m "init"
 git -C "$REPO_DIR" worktree add -q "$WORKTREE_DIR" 2>/dev/null
 
