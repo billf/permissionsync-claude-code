@@ -1,5 +1,5 @@
 ---
-status: ready
+status: complete
 priority: p2
 issue_id: "010"
 tags: [schema, hook-errors, jsonl, is-safe, indirection-chain]

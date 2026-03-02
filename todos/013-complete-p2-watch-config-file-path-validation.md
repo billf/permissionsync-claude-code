@@ -1,5 +1,5 @@
 ---
-status: ready
+status: complete
 priority: p2
 issue_id: "013"
 tags: [watch-config, security, file-path, config-change, validation]

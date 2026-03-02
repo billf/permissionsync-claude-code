@@ -1,5 +1,5 @@
 ---
-status: ready
+status: complete
 priority: p3
 issue_id: "020"
 tags: [tests, sync-on-end, dead-code, cleanup]

@@ -1,5 +1,5 @@
 ---
-status: ready
+status: complete
 priority: p1
 issue_id: "009"
 tags: [watch-config, config-change, blocking, set-e]

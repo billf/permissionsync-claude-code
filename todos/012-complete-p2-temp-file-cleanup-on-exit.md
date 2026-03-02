@@ -1,5 +1,5 @@
 ---
-status: ready
+status: complete
 priority: p2
 issue_id: "012"
 tags: [install, temp-files, cleanup, trap, setup-hooks]

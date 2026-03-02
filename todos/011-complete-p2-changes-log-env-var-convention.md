@@ -1,5 +1,5 @@
 ---
-status: ready
+status: complete
 priority: p2
 issue_id: "011"
 tags: [watch-config, config, env-var, changes-log, convention]
