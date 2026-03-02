@@ -2,6 +2,11 @@
 # permissionsync-log-hook-errors.sh: PostToolUseFailure hook — logs failed tool executions
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Self-failure trap: if this script itself encounters an unexpected error, write a
+# minimal record to a fallback log so the failure is not completely silent.
+_self_err_log="${HOME}/.claude/hook-errors-meta.log"
+trap 'echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) permissionsync-log-hook-errors: unexpected error (exit $?)" >>"$_self_err_log"; exit 0' ERR
 # shellcheck source=lib/permissionsync-lib.sh
 source "$SCRIPT_DIR/lib/permissionsync-lib.sh"
 
