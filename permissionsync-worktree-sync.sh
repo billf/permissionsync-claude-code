@@ -92,20 +92,23 @@ ALL_RULES=$(echo "$ALL_TAGGED_RULES" | cut -f1 | sed '/^$/d' | sort -u)
 # ============================================================
 
 if [[ $FROM_LOG -eq 1 ]] && [[ -f $LOG_FILE ]]; then
-	# Build a grep pattern for CWDs matching worktree paths
-	cwd_pattern=""
+	# Build a jq filter using startswith for each worktree path (no regex injection surface)
+	jq_expr='select(.cwd != null and ('
+	sep=''
 	for ((i = 0; i < WORKTREE_COUNT; i++)); do
-		wt="${WORKTREE_PATHS[$i]}"
-		if [[ -z $cwd_pattern ]]; then
-			cwd_pattern="$wt"
-		else
-			cwd_pattern="${cwd_pattern}|${wt}"
-		fi
+		jq_expr+="${sep}(.cwd | startswith(\$wt${i}))"
+		sep=' or '
+	done
+	jq_expr+='))'
+
+	# Build --arg args for each worktree path
+	jq_args=()
+	for ((i = 0; i < WORKTREE_COUNT; i++)); do
+		jq_args+=(--arg "wt${i}" "${WORKTREE_PATHS[$i]}")
 	done
 
 	# Filter log for entries matching worktree CWDs, extract rules
-	log_rules=$(jq -r --arg pattern "$cwd_pattern" \
-		'select(.cwd != null and (.cwd | test($pattern))) | .rule // empty' \
+	log_rules=$(jq -r "${jq_args[@]}" "${jq_expr} | .rule // empty" \
 		"$LOG_FILE" 2>/dev/null |
 		grep -E '^(Bash\(.*\)|Read|Write|Edit|MultiEdit|WebFetch(\(.*\))?|mcp__.*)$' |
 		sort -u) || true
