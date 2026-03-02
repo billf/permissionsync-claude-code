@@ -60,11 +60,20 @@ cmd_status() {
 	if [[ -f $settings ]]; then
 		if jq -e '.hooks.PermissionRequest[]?.hooks[]? | select(.command != null and (.command | contains("log-permission")))' \
 			"$settings" >/dev/null 2>&1; then
-			local mode
+			local mode old_cmd
 			mode=$(jq -r '.hooks.PermissionRequest[]?.hooks[]?.command // empty' "$settings" 2>/dev/null |
 				grep -o 'CLAUDE_PERMISSION_MODE=[a-z]*' | head -1 | cut -d= -f2 || true)
 			if [[ -z $mode ]]; then
-				mode="unknown"
+				# Detect old-style env vars (pre-CLAUDE_PERMISSION_MODE installs)
+				old_cmd=$(jq -r '.hooks.PermissionRequest[]?.hooks[]?.command // empty' "$settings" 2>/dev/null |
+					grep 'log-permission' | head -1 || true)
+				if echo "$old_cmd" | grep -q 'CLAUDE_PERMISSION_WORKTREE'; then
+					mode="worktree (legacy — re-run installer to upgrade)"
+				elif echo "$old_cmd" | grep -q 'CLAUDE_PERMISSION_AUTO'; then
+					mode="auto (legacy — re-run installer to upgrade)"
+				else
+					mode="log (legacy — re-run installer to upgrade)"
+				fi
 			fi
 			echo "  PermissionRequest: installed (mode: $mode)"
 			hook_installed=1
