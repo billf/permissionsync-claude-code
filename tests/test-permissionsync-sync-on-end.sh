@@ -46,14 +46,7 @@ STUB_DIR="${TMP_DIR}/stub"
 mkdir -p "$STUB_DIR"
 INVOCATIONS_LOG="${TMP_DIR}/invocations.log"
 
-cat >"${STUB_DIR}/permissionsync-sync.sh" <<'STUB'
-#!/usr/bin/env bash
-echo "$*" >> "${INVOCATIONS_LOG}"
-exit 0
-STUB
-# Export log path for stub
 export INVOCATIONS_LOG
-# Patch stub to use the exported variable
 cat >"${STUB_DIR}/permissionsync-sync.sh" <<STUB
 #!/usr/bin/env bash
 echo "\$*" >> "$INVOCATIONS_LOG"
