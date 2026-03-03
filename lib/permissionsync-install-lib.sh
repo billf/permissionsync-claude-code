@@ -2,7 +2,8 @@
 # permissionsync-install-lib.sh — shared functions for both installers
 #
 # Sourced by permissionsync-setup.sh and permissionsync-install.sh.
-# Requires PERMISSIONSYNC_LIB_DIR and SETTINGS to be set by the caller.
+# Requires SETTINGS to be set by the caller.
+# PERMISSIONSYNC_LIB_DIR is optional — falls back to this file's directory.
 
 _PERMISSIONSYNC_INSTALL_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -69,11 +70,16 @@ seed_baseline_permissions() {
 
 	local tmp
 	tmp=$(mktemp)
-	jq --argjson rules "$rules_json" \
+	if ! jq --argjson rules "$rules_json" \
 		'.permissions //= {} | .permissions.allow //= [] | .permissions.allow += $rules | .permissions.allow |= unique | .permissions.allow |= sort' \
-		"$settings" >"$tmp" && mv "$tmp" "$settings"
+		"$settings" >"$tmp"; then
+		rm -f "$tmp"
+		echo "ERROR: Failed to seed baseline permissions in $settings" >&2
+		return 1
+	fi
+	mv "$tmp" "$settings"
 
 	local count
 	count=$(echo "$rules_json" | jq 'length')
-	echo "permissionsync-cc: seeded $count baseline rules into settings.json"
+	echo "permissionsync-cc: seeded $count baseline rules into $settings"
 }
