@@ -25,7 +25,7 @@ in
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.package ];
     home.activation.permissionsync = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      ${cfg.package}/bin/permissionsync-setup.sh ${cfg.mode}
+      run ${cfg.package}/bin/permissionsync-setup.sh ${cfg.mode}
     '';
   };
 }
