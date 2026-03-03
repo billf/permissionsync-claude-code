@@ -1,5 +1,5 @@
 ---
-status: ready
+status: deferred
 priority: p1
 issue_id: "031"
 tags: [architecture, permission-mode, plan-mode, apply-mode, logging, sync, worktree, major]
