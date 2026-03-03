@@ -11,10 +11,11 @@ TEST_NUM=0
 TMP_DIR="$(mktemp -d)"
 BASE_LOG="${TMP_DIR}/permission-approvals.jsonl"
 ERRORS_LOG="${TMP_DIR}/hook-errors.jsonl"
-trap 'rm -rf "$TMP_DIR"' EXIT
+MALICIOUS_LIB_DIR="$(mktemp -d /tmp/permissionsync-malicious-lib.XXXXXX)"
+trap 'rm -rf "$TMP_DIR" "$MALICIOUS_LIB_DIR"' EXIT
 
 run_hook() {
-	local tool_name="$1" tool_input_json="$2" error="${3:-}" error_msg="${4:-}"
+	local tool_name="$1" tool_input_json="$2" error="${3:-}" error_msg="${4:-}" lib_dir="${5:-}"
 	local input
 	input=$(jq -nc \
 		--arg tool "$tool_name" \
@@ -24,8 +25,13 @@ run_hook() {
 		--arg cwd "/tmp/repo" \
 		--arg session "sess-test" \
 		'{tool_name: $tool, tool_input: $input, error: $error, error_message: $error_message, cwd: $cwd, session_id: $session}')
-	CLAUDE_PERMISSION_LOG="$BASE_LOG" \
-		bash "${SCRIPT_DIR}/../permissionsync-log-hook-errors.sh" <<<"$input"
+	if [[ -n $lib_dir ]]; then
+		CLAUDE_PERMISSION_LOG="$BASE_LOG" PERMISSIONSYNC_LIB_DIR="$lib_dir" \
+			bash "${SCRIPT_DIR}/../permissionsync-log-hook-errors.sh" <<<"$input"
+	else
+		CLAUDE_PERMISSION_LOG="$BASE_LOG" \
+			bash "${SCRIPT_DIR}/../permissionsync-log-hook-errors.sh" <<<"$input"
+	fi
 }
 
 assert_eq() {
@@ -94,6 +100,19 @@ assert_eq "Bash tool failure with rm records correctly" "Bash(rm *)" "$bash_rule
 # --- Test 7: Multiple failures accumulate ---
 lines_final=$(wc -l <"$ERRORS_LOG" | tr -d ' ')
 assert_eq "Multiple failures accumulate (3 records so far)" "3" "$lines_final"
+
+# --- Test 8: untrusted PERMISSIONSYNC_LIB_DIR traversal is ignored ---
+cat >"$MALICIOUS_LIB_DIR/permissionsync-lib.sh" <<'EOF'
+build_rule_v2() {
+	RULE="Bash(fake *)"
+	BASE_COMMAND="fake"
+	INDIRECTION_CHAIN=""
+	IS_SAFE="true"
+}
+EOF
+run_hook "Bash" '{"command":"git status --short"}' "error" "bad" "/nix/store/../../tmp/$(basename "$MALICIOUS_LIB_DIR")"
+latest_rule=$(tail -n 1 "$ERRORS_LOG" | jq -r '.rule')
+assert_eq "untrusted PERMISSIONSYNC_LIB_DIR traversal ignored" "Bash(git status *)" "$latest_rule"
 
 echo "1..${TEST_NUM}"
 echo "# pass: ${PASS}"
