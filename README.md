@@ -58,6 +58,24 @@ The setup script is idempotent and silent — it only copies files when they've 
 
 An overlay is also available at `permissionsync-cc.overlays.default` if you prefer `pkgs.permissionsync-cc`.
 
+### Home Manager
+
+With the same flake input as above, import the module and enable it:
+
+```nix
+# home.nix (or wherever your home-manager config lives)
+{
+  imports = [ permissionsync-cc.homeManagerModules.default ];
+
+  programs.permissionsync-cc = {
+    enable = true;
+    mode = "worktree";  # "log" (default), "auto", or "worktree"
+  };
+}
+```
+
+The module runs `permissionsync-setup.sh` during home-manager activation, so hooks are deployed automatically whenever you run `home-manager switch`.
+
 ### Manual (no Nix)
 
 ```bash
