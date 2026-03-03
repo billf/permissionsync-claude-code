@@ -30,6 +30,7 @@
         "permissionsync-session-start.sh"
         "permissionsync-worktree-create.sh"
         "permissionsync-setup.sh"
+        "permissionsync-install.sh"
       ];
 
       # Library scripts — sourced only, installed to lib/ subdir, NOT in bin/
@@ -44,7 +45,7 @@
       ];
 
       # Scripts copied to share/ (executables + build-time + installer)
-      shareScripts = executableScripts ++ buildScripts ++ [ "permissionsync-install.sh" ];
+      shareScripts = executableScripts ++ buildScripts;
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [
