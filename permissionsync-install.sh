@@ -18,39 +18,11 @@ HOOKS_DIR="$HOME/.claude/hooks"
 SETTINGS="$HOME/.claude/settings.json"
 MODE="${1:-}"
 
+# shellcheck source=lib/permissionsync-install-lib.sh
+source "$SCRIPT_DIR/lib/permissionsync-install-lib.sh"
+
 echo "=== Claude Permission Logger — Installer ==="
 echo ""
-
-# seed_baseline_permissions HOOKS_DIR SETTINGS
-#
-# Pre-seeds ~/.claude/settings.json with all curated safe-subcommand rules
-# from permissionsync-config.sh. This ensures the first session starts with
-# known-safe operations already allowed, reducing prompt noise from day one.
-# Only runs when settings.json has no existing permissions.allow rules.
-seed_baseline_permissions() {
-	local hooks_dir="$1" settings="$2"
-	# shellcheck source=lib/permissionsync-lib.sh
-	source "${hooks_dir}/lib/permissionsync-lib.sh"
-
-	local existing_count
-	existing_count=$(jq '.permissions.allow | length' "$settings" 2>/dev/null || echo 0)
-	if [[ $existing_count -gt 0 ]]; then
-		return 0 # Already has rules — skip seeding
-	fi
-
-	local rules_json
-	rules_json=$(generate_baseline_rules | sort -u | jq -R -s 'split("\n") | map(select(length > 0))')
-
-	local tmp
-	tmp=$(mktemp)
-	jq --argjson rules "$rules_json" \
-		'.permissions //= {} | .permissions.allow //= [] | .permissions.allow += $rules | .permissions.allow |= unique | .permissions.allow |= sort' \
-		"$settings" >"$tmp" && mv "$tmp" "$settings"
-
-	local count
-	count=$(echo "$rules_json" | jq 'length')
-	echo "✓ Seeded $count baseline safe-subcommand rules into $settings"
-}
 
 # 1. Copy hook scripts and shared libraries
 mkdir -p "$HOOKS_DIR" "$HOOKS_DIR/lib"
@@ -113,256 +85,39 @@ MANAGED_NEW_MODE_LOG_CMD="CLAUDE_PERMISSION_MODE=log $HOOKS_DIR/permissionsync-l
 MANAGED_NEW_MODE_AUTO_CMD="CLAUDE_PERMISSION_MODE=auto $HOOKS_DIR/permissionsync-log-permission.sh"
 MANAGED_NEW_MODE_WORKTREE_CMD="CLAUDE_PERMISSION_MODE=worktree $HOOKS_DIR/permissionsync-log-permission.sh"
 
-# 3. Merge hook config into settings.json
+# 3. Ensure settings.json exists
 if [[ ! -f $SETTINGS ]]; then
 	echo '{}' >"$SETTINGS"
 fi
 
-TEMP=$(mktemp)
-if ! jq \
-	--arg cmd "$HOOK_CMD" \
-	--arg managed_log "$MANAGED_LOG_CMD" \
-	--arg managed_mode_log "$MANAGED_MODE_LOG_CMD" \
-	--arg managed_auto "$MANAGED_AUTO_CMD" \
-	--arg managed_mode_auto "$MANAGED_MODE_AUTO_CMD" \
-	--arg managed_worktree "$MANAGED_WORKTREE_CMD" \
-	--arg managed_mode_worktree "$MANAGED_MODE_WORKTREE_CMD" \
-	--arg managed_new_mode_log "$MANAGED_NEW_MODE_LOG_CMD" \
-	--arg managed_new_mode_auto "$MANAGED_NEW_MODE_AUTO_CMD" \
-	--arg managed_new_mode_worktree "$MANAGED_NEW_MODE_WORKTREE_CMD" '
-    .hooks //= {} |
-    .hooks.PermissionRequest //= [] |
-    .hooks.PermissionRequest = (
-      [
-        .hooks.PermissionRequest[]
-        | .hooks = (
-            (.hooks // [])
-            | map(
-                select(
-                  (.command == $managed_log
-                   or .command == $managed_mode_log
-                   or .command == $managed_auto
-                   or .command == $managed_mode_auto
-                   or .command == $managed_worktree
-                   or .command == $managed_mode_worktree
-                   or .command == $managed_new_mode_log
-                   or .command == $managed_new_mode_auto
-                   or .command == $managed_new_mode_worktree)
-                  | not
-                )
-              )
-          )
-        | select((.hooks | length) > 0)
-      ] + [{
-        matcher: "*",
-        hooks: [{type: "command", command: $cmd}]
-      }]
-    )
-  ' "$SETTINGS" >"$TEMP"; then
-	echo "ERROR: Failed to update $SETTINGS"
-	rm -f "$TEMP"
-	exit 1
-fi
-
-if ! cmp -s "$SETTINGS" "$TEMP"; then
-	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
-	mv "$TEMP" "$SETTINGS"
+# 4. Wire all hooks (each call evicts legacy names then adds current)
+if wire_hook "PermissionRequest" "$HOOK_CMD" "*" "permission logger" \
+	"$MANAGED_LOG_CMD" "$MANAGED_MODE_LOG_CMD" \
+	"$MANAGED_AUTO_CMD" "$MANAGED_MODE_AUTO_CMD" \
+	"$MANAGED_WORKTREE_CMD" "$MANAGED_MODE_WORKTREE_CMD" \
+	"$MANAGED_NEW_MODE_LOG_CMD" "$MANAGED_NEW_MODE_AUTO_CMD" \
+	"$MANAGED_NEW_MODE_WORKTREE_CMD"; then
 	echo "✓ Updated PermissionRequest hook in $SETTINGS"
 else
-	rm -f "$TEMP"
 	echo "✓ Hook already installed in $SETTINGS"
 fi
-
-# 4. Wire PostToolUse hook for confirmed-approvals log
-# Evicts old name (log-confirmed.sh) and current name before re-adding current.
-CONFIRMED_CMD="$HOOKS_DIR/permissionsync-log-confirmed.sh"
-CONFIRMED_CMD_OLD="$HOOKS_DIR/log-confirmed.sh"
-TEMP2=$(mktemp)
-if ! jq \
-	--arg cmd "$CONFIRMED_CMD" \
-	--arg old_cmd "$CONFIRMED_CMD_OLD" '
-    .hooks //= {} |
-    .hooks.PostToolUse //= [] |
-    .hooks.PostToolUse = (
-      [
-        .hooks.PostToolUse[]
-        | .hooks = ((.hooks // []) | map(select(.command != $cmd and .command != $old_cmd)))
-        | select((.hooks | length) > 0)
-      ] + [{
-        matcher: "*",
-        hooks: [{type: "command", command: $cmd}]
-      }]
-    )
-  ' "$SETTINGS" >"$TEMP2"; then
-	echo "ERROR: Failed to wire PostToolUse hook in $SETTINGS"
-	rm -f "$TEMP2"
-	exit 1
-fi
-if ! cmp -s "$SETTINGS" "$TEMP2"; then
-	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
-	mv "$TEMP2" "$SETTINGS"
+wire_hook "PostToolUse" "$HOOKS_DIR/permissionsync-log-confirmed.sh" "*" "confirmed-approvals log" \
+	"$HOOKS_DIR/log-confirmed.sh" &&
 	echo "✓ Wired PostToolUse hook (confirmed-approvals log)"
-else
-	rm -f "$TEMP2"
-fi
-
-# 5. Wire PostToolUseFailure hook for hook-errors log
-ERRORS_CMD="$HOOKS_DIR/permissionsync-log-hook-errors.sh"
-TEMP3=$(mktemp)
-if ! jq \
-	--arg cmd "$ERRORS_CMD" '
-    .hooks //= {} |
-    .hooks.PostToolUseFailure //= [] |
-    .hooks.PostToolUseFailure = (
-      [
-        .hooks.PostToolUseFailure[]
-        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
-        | select((.hooks | length) > 0)
-      ] + [{
-        matcher: "*",
-        hooks: [{type: "command", command: $cmd}]
-      }]
-    )
-  ' "$SETTINGS" >"$TEMP3"; then
-	echo "ERROR: Failed to wire PostToolUseFailure hook in $SETTINGS"
-	rm -f "$TEMP3"
-	exit 1
-fi
-if ! cmp -s "$SETTINGS" "$TEMP3"; then
-	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
-	mv "$TEMP3" "$SETTINGS"
+wire_hook "PostToolUseFailure" "$HOOKS_DIR/permissionsync-log-hook-errors.sh" "*" "hook-errors log" &&
 	echo "✓ Wired PostToolUseFailure hook (hook-errors log)"
-else
-	rm -f "$TEMP3"
-fi
-
-# 6. Wire ConfigChange hook for config-changes log
-WATCH_CMD="$HOOKS_DIR/permissionsync-watch-config.sh"
-TEMP4=$(mktemp)
-if ! jq \
-	--arg cmd "$WATCH_CMD" '
-    .hooks //= {} |
-    .hooks.ConfigChange //= [] |
-    .hooks.ConfigChange = (
-      [
-        .hooks.ConfigChange[]
-        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
-        | select((.hooks | length) > 0)
-      ] + [{
-        matcher: "user_settings",
-        hooks: [{type: "command", command: $cmd}]
-      }]
-    )
-  ' "$SETTINGS" >"$TEMP4"; then
-	echo "ERROR: Failed to wire ConfigChange hook in $SETTINGS"
-	rm -f "$TEMP4"
-	exit 1
-fi
-if ! cmp -s "$SETTINGS" "$TEMP4"; then
-	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
-	mv "$TEMP4" "$SETTINGS"
+wire_hook "ConfigChange" "$HOOKS_DIR/permissionsync-watch-config.sh" "user_settings" "config-changes log" &&
 	echo "✓ Wired ConfigChange hook (config-changes log)"
-else
-	rm -f "$TEMP4"
-fi
-
-# 7. Wire SessionEnd hook for auto-sync
-SYNCEND_CMD="$HOOKS_DIR/permissionsync-sync-on-end.sh"
-TEMP5=$(mktemp)
-if ! jq \
-	--arg cmd "$SYNCEND_CMD" '
-    .hooks //= {} |
-    .hooks.SessionEnd //= [] |
-    .hooks.SessionEnd = (
-      [
-        .hooks.SessionEnd[]
-        | .hooks = ((.hooks // []) | map(select(.command != $cmd)))
-        | select((.hooks | length) > 0)
-      ] + [{
-        matcher: "*",
-        hooks: [{type: "command", command: $cmd}]
-      }]
-    )
-  ' "$SETTINGS" >"$TEMP5"; then
-	echo "ERROR: Failed to wire SessionEnd hook in $SETTINGS"
-	rm -f "$TEMP5"
-	exit 1
-fi
-if ! cmp -s "$SETTINGS" "$TEMP5"; then
-	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
-	mv "$TEMP5" "$SETTINGS"
+wire_hook "SessionEnd" "$HOOKS_DIR/permissionsync-sync-on-end.sh" "*" "auto-sync on exit" &&
 	echo "✓ Wired SessionEnd hook (auto-sync on exit)"
-else
-	rm -f "$TEMP5"
-fi
-
-# 8. Wire SessionStart hook for drift notification
-# Evicts old names (session-start.sh, sync-permissions.sh --diff) and current name before re-adding current.
-SESSION_START_CMD="$HOOKS_DIR/permissionsync-session-start.sh"
-SESSION_START_CMD_OLD="$HOOKS_DIR/session-start.sh"
-SESSION_START_CMD_STALE="$HOOKS_DIR/sync-permissions.sh --diff"
-TEMP6=$(mktemp)
-if ! jq \
-	--arg cmd "$SESSION_START_CMD" \
-	--arg old_cmd "$SESSION_START_CMD_OLD" \
-	--arg stale_cmd "$SESSION_START_CMD_STALE" '
-    .hooks //= {} |
-    .hooks.SessionStart //= [] |
-    .hooks.SessionStart = (
-      [
-        .hooks.SessionStart[]
-        | .hooks = ((.hooks // []) | map(select(.command != $cmd and .command != $old_cmd and .command != $stale_cmd)))
-        | select((.hooks | length) > 0)
-      ] + [{
-        hooks: [{type: "command", command: $cmd}]
-      }]
-    )
-  ' "$SETTINGS" >"$TEMP6"; then
-	echo "ERROR: Failed to wire SessionStart hook in $SETTINGS"
-	rm -f "$TEMP6"
-	exit 1
-fi
-if ! cmp -s "$SETTINGS" "$TEMP6"; then
-	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
-	mv "$TEMP6" "$SETTINGS"
+wire_hook "SessionStart" "$HOOKS_DIR/permissionsync-session-start.sh" "" "drift notification" \
+	"$HOOKS_DIR/session-start.sh" "$HOOKS_DIR/sync-permissions.sh --diff" &&
 	echo "✓ Wired SessionStart hook (drift notification)"
-else
-	rm -f "$TEMP6"
-fi
-
-# 9. Wire WorktreeCreate hook for settings seeding
-# Evicts old name (worktree-create.sh) and current name before re-adding current.
-WORKTREE_CREATE_CMD="$HOOKS_DIR/permissionsync-worktree-create.sh"
-WORKTREE_CREATE_CMD_OLD="$HOOKS_DIR/worktree-create.sh"
-TEMP7=$(mktemp)
-if ! jq \
-	--arg cmd "$WORKTREE_CREATE_CMD" \
-	--arg old_cmd "$WORKTREE_CREATE_CMD_OLD" '
-    .hooks //= {} |
-    .hooks.WorktreeCreate //= [] |
-    .hooks.WorktreeCreate = (
-      [
-        .hooks.WorktreeCreate[]
-        | .hooks = ((.hooks // []) | map(select(.command != $cmd and .command != $old_cmd)))
-        | select((.hooks | length) > 0)
-      ] + [{
-        hooks: [{type: "command", command: $cmd}]
-      }]
-    )
-  ' "$SETTINGS" >"$TEMP7"; then
-	echo "ERROR: Failed to wire WorktreeCreate hook in $SETTINGS"
-	rm -f "$TEMP7"
-	exit 1
-fi
-if ! cmp -s "$SETTINGS" "$TEMP7"; then
-	cp "$SETTINGS" "${SETTINGS}.bak" 2>/dev/null || true
-	mv "$TEMP7" "$SETTINGS"
+wire_hook "WorktreeCreate" "$HOOKS_DIR/permissionsync-worktree-create.sh" "" "settings seeding" \
+	"$HOOKS_DIR/worktree-create.sh" &&
 	echo "✓ Wired WorktreeCreate hook (settings seeding)"
-else
-	rm -f "$TEMP7"
-fi
 
-# 10. Seed baseline permissions (skips if settings already has allow rules)
+# 5. Seed baseline permissions (skips if settings already has allow rules)
 seed_baseline_permissions "$HOOKS_DIR" "$SETTINGS"
 
 echo ""

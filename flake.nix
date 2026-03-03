@@ -37,6 +37,8 @@
       libraryScripts = [
         "permissionsync-lib.sh"
         "permissionsync-config.sh"
+        "permissionsync-install-lib.sh"
+        "wire-hook.jq"
       ];
 
       # Build-time only scripts (not installed to bin/)
