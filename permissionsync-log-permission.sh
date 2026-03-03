@@ -52,12 +52,14 @@ auto)
 *) ;;
 esac
 
-# is_coarse_bare_rule RULE → 0 if RULE is a broad bare matcher that should
-# never be auto-approved from history/worktree replay.
+# is_never_auto_rule RULE → 0 if RULE should never be auto-approved from
+# history/worktree replay:
+# - Coarse bare matchers too broad for safe replay (Bash, Read, Write, etc.)
+# - Mode transitions requiring explicit consent (ExitPlanMode)
 # Exact non-parenthesized rules (e.g. mcp__server__tool) are allowed.
-is_coarse_bare_rule() {
+is_never_auto_rule() {
 	case "$1" in
-	Bash | Read | Write | Edit | MultiEdit | WebFetch)
+	Bash | Read | Write | Edit | MultiEdit | WebFetch | ExitPlanMode)
 		return 0
 		;;
 	*)
@@ -80,7 +82,7 @@ build_rule_v2 "$TOOL_NAME" "$TOOL_INPUT"
 SEEN_BEFORE=0
 # Only check history for specific rules.
 # Coarse bare rules like "Bash" and "Read" are too broad for replay.
-if [[ $AUTO_MODE == "1" ]] && [[ -f $LOG_FILE ]] && ! is_coarse_bare_rule "$RULE"; then
+if [[ $AUTO_MODE == "1" ]] && [[ -f $LOG_FILE ]] && ! is_never_auto_rule "$RULE"; then
 	if grep -qF "\"rule\":\"${RULE}\"" "$LOG_FILE" 2>/dev/null; then
 		SEEN_BEFORE=1
 	fi
@@ -105,10 +107,10 @@ if [[ $AUTO_APPROVED == "false" ]] && [[ $AUTO_MODE == "1" ]] && [[ $SEEN_BEFORE
 	AUTO_APPROVED="true"
 fi
 
-# Safety net: never auto-approve coarse bare rules.
-# "Bash" groups ALL unclassifiable commands (blocked interpreters, shell keywords,
-# invalid syntax), and file-tool bare rules are broad across all paths.
-if is_coarse_bare_rule "$RULE"; then
+# Safety net: never auto-approve blocked rules.
+# Coarse bare matchers group too many operations; mode transitions
+# (ExitPlanMode) should always require explicit user consent.
+if is_never_auto_rule "$RULE"; then
 	AUTO_APPROVED="false"
 fi
 

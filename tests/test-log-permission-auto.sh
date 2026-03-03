@@ -214,6 +214,25 @@ assert_behavior "bare Bash rule: different script still not auto-approved" "" "$
 out=$(run_hook "git status" 1)
 assert_behavior "safe subcommand unaffected by bare-rule guard" "allow" "$out"
 
+# --- ExitPlanMode never auto-approved ---
+rm -f "$LOG_FILE"
+
+out=$(run_hook_tool_mode "ExitPlanMode" '{}' "auto")
+assert_behavior "ExitPlanMode: first-seen not auto-approved" "" "$out"
+assert_log_lines "ExitPlanMode: first invocation logged" "1"
+
+out=$(run_hook_tool_mode "ExitPlanMode" '{}' "auto")
+assert_behavior "ExitPlanMode: second-seen still not auto-approved" "" "$out"
+assert_log_lines "ExitPlanMode: second invocation logged" "2"
+
+# Worktree mode also should not auto-approve ExitPlanMode from history
+rm -f "$LOG_FILE"
+out=$(run_hook_tool_mode "ExitPlanMode" '{}' "worktree")
+assert_behavior "ExitPlanMode worktree: first-seen not auto-approved" "" "$out"
+
+out=$(run_hook_tool_mode "ExitPlanMode" '{}' "worktree")
+assert_behavior "ExitPlanMode worktree: second-seen still not auto-approved" "" "$out"
+
 echo "1..${TEST_NUM}"
 echo "# pass: ${PASS}"
 echo "# fail: ${FAIL}"
