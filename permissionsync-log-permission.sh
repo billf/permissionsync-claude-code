@@ -21,8 +21,20 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+_PSC_LIB_DIR="$SCRIPT_DIR/lib"
+if [[ -n ${PERMISSIONSYNC_LIB_DIR:-} ]] && [[ -d $PERMISSIONSYNC_LIB_DIR ]]; then
+	_PSC_LIB_DIR_CANDIDATE="$(cd "$PERMISSIONSYNC_LIB_DIR" 2>/dev/null && pwd -P || true)"
+	case "$_PSC_LIB_DIR_CANDIDATE" in
+	/nix/store/*)
+		if [[ -r "$_PSC_LIB_DIR_CANDIDATE/permissionsync-lib.sh" ]]; then
+			_PSC_LIB_DIR="$_PSC_LIB_DIR_CANDIDATE"
+		fi
+		;;
+	*) ;;
+	esac
+fi
 # shellcheck source=lib/permissionsync-lib.sh
-source "$SCRIPT_DIR/lib/permissionsync-lib.sh"
+source "${_PSC_LIB_DIR}/permissionsync-lib.sh"
 
 LOG_FILE="${CLAUDE_PERMISSION_LOG:-$HOME/.claude/permission-approvals.jsonl}"
 
