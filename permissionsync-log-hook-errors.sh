@@ -18,7 +18,13 @@ fi
 # Self-failure trap: if this script itself encounters an unexpected error, write a
 # minimal record to a fallback log so the failure is not completely silent.
 _self_err_log="${HOME}/.claude/hook-errors-meta.log"
-trap 'echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) permissionsync-log-hook-errors: unexpected error (exit $?)" >>"$_self_err_log"; exit 0' ERR
+# shellcheck disable=SC2329 # Invoked indirectly via trap
+_trap_ps_err() {
+	local _ps_status=$?
+	printf '%s permissionsync-log-hook-errors: unexpected error (exit %s)\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$_ps_status" >>"$_self_err_log"
+	exit 0
+}
+trap _trap_ps_err ERR
 # shellcheck source=lib/permissionsync-lib.sh
 source "${_PSC_LIB_DIR}/permissionsync-lib.sh"
 

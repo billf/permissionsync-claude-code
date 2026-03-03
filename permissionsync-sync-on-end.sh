@@ -6,7 +6,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Self-failure trap: if unexpected errors occur outside the guarded sync call (e.g.
 # bad stdin, missing jq), log to a fallback file and exit 0 to avoid blocking Claude.
 _self_err_log="${HOME}/.claude/hook-errors-meta.log"
-trap 'echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) permissionsync-sync-on-end: unexpected error (exit $?)" >>"$_self_err_log"; exit 0' ERR
+# shellcheck disable=SC2329 # Invoked indirectly via trap
+_trap_ps_err() {
+	local _ps_status=$?
+	printf '%s permissionsync-sync-on-end: unexpected error (exit %s)\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$_ps_status" >>"$_self_err_log"
+	exit 0
+}
+trap _trap_ps_err ERR
 
 # Read and parse stdin — SessionEnd payload contains a reason field
 INPUT=$(</dev/stdin)
