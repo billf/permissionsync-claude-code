@@ -308,19 +308,21 @@ else
 fi
 
 # 8. Wire SessionStart hook for drift notification (idempotent)
-# Evicts old name (session-start.sh) and current name before re-adding current.
+# Evicts old names (session-start.sh, sync-permissions.sh --diff) and current name before re-adding current.
 SESSION_START_CMD="$HOOKS_DIR/permissionsync-session-start.sh"
 SESSION_START_CMD_OLD="$HOOKS_DIR/session-start.sh"
+SESSION_START_CMD_STALE="$HOOKS_DIR/sync-permissions.sh --diff"
 TEMP6=$(mktemp)
 if ! jq \
 	--arg cmd "$SESSION_START_CMD" \
-	--arg old_cmd "$SESSION_START_CMD_OLD" '
+	--arg old_cmd "$SESSION_START_CMD_OLD" \
+	--arg stale_cmd "$SESSION_START_CMD_STALE" '
     .hooks //= {} |
     .hooks.SessionStart //= [] |
     .hooks.SessionStart = (
       [
         .hooks.SessionStart[]
-        | .hooks = ((.hooks // []) | map(select(.command != $cmd and .command != $old_cmd)))
+        | .hooks = ((.hooks // []) | map(select(.command != $cmd and .command != $old_cmd and .command != $stale_cmd)))
         | select((.hooks | length) > 0)
       ] + [{
         hooks: [{type: "command", command: $cmd}]

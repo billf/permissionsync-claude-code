@@ -290,6 +290,39 @@ run_setup log >/dev/null
 assert_file_exists "creates settings.json.bak" \
 	"$TEST_HOME/.claude/settings.json.bak"
 
+# --- Test: Evicts stale sync-permissions.sh --diff from SessionStart ---
+reset_home
+mkdir -p "$TEST_HOME/.claude"
+stale_cmd="$TEST_HOME/.claude/hooks/sync-permissions.sh --diff"
+cat >"$TEST_HOME/.claude/settings.json" <<EOF
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [{"type": "command", "command": "${stale_cmd}"}]
+      }
+    ]
+  }
+}
+EOF
+run_setup log >/dev/null
+
+stale_count=$(jq --arg stale "$stale_cmd" \
+	'[.hooks.SessionStart[]?.hooks[]?.command | select(. == $stale)] | length' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "stale sync-permissions.sh --diff is evicted from SessionStart" "0" "$stale_count"
+
+session_start_count=$(jq \
+	'[.hooks.SessionStart[]?.hooks[]] | length' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "SessionStart has exactly one hook after stale eviction" "1" "$session_start_count"
+
+expected_session_start="$TEST_HOME/.claude/hooks/permissionsync-session-start.sh"
+session_start_cmd=$(jq -r '.hooks.SessionStart[0].hooks[0].command' \
+	"$TEST_HOME/.claude/settings.json")
+assert_eq "SessionStart hook is the current script after stale eviction" \
+	"$expected_session_start" "$session_start_cmd"
+
 # --- Summary ---
 echo ""
 echo "1..${TEST_NUM}"
