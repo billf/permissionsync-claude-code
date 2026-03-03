@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# worktree-sync.sh — aggregate and sync permission rules across git worktrees
+# permissionsync-worktree-sync.sh — aggregate and sync permission rules across git worktrees
 #
 # Reads .claude/settings.local.json from all worktrees of the current repo,
 # aggregates rules, and can sync them to one or all worktrees.

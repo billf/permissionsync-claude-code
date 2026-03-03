@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # claude-permission-logger: PermissionRequest hook
 # Logs every permission approval to a centralized file, then passes through to the user.
-# Install: copy to ~/.claude/hooks/log-permission.sh && chmod +x
+# Install: copy to ~/.claude/hooks/permissionsync-log-permission-v1.sh && chmod +x
 #
 # The log file (~/.claude/permission-approvals.jsonl) accumulates every tool
 # permission you grant across all repos/worktrees.  A companion script

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# worktree-create.sh: WorktreeCreate hook — seeds new worktree with root's settings.local.json
+# permissionsync-worktree-create.sh: WorktreeCreate hook — seeds new worktree with root's settings.local.json
 #
 # Input (stdin): JSON {"name": "<slug>", "cwd": "<worktree-path>"}
 # Output (stdout): absolute worktree path (required by Claude Code)

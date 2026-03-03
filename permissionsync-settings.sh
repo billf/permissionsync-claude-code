@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# merged-settings.sh — output merged permissions JSON for claude --settings
+# permissionsync-settings.sh — output merged permissions JSON for claude --settings
 #
 # Merges global settings, worktree rules, and optionally JSONL log rules
 # into a single JSON document on stdout. Designed for use with process

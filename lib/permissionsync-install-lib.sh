@@ -52,6 +52,49 @@ wire_hook() {
 	return 1
 }
 
+# resolve_hook_cmd MODE HOOKS_DIR
+#
+# Sets HOOK_CMD based on the permission mode. Normalizes mode format
+# (strips leading dashes) so both installers can pass their native format.
+# shellcheck disable=SC2034  # HOOK_CMD is used by callers
+resolve_hook_cmd() {
+	local mode="${1#--}" hooks_dir="$2"
+	case "$mode" in
+	auto)
+		HOOK_CMD="CLAUDE_PERMISSION_MODE=auto $hooks_dir/permissionsync-log-permission.sh"
+		;;
+	worktree)
+		HOOK_CMD="CLAUDE_PERMISSION_MODE=worktree $hooks_dir/permissionsync-log-permission.sh"
+		;;
+	*)
+		HOOK_CMD="CLAUDE_PERMISSION_MODE=log $hooks_dir/permissionsync-log-permission.sh"
+		;;
+	esac
+}
+
+# set_managed_cmds HOOKS_DIR
+#
+# Sets all MANAGED_*_CMD variables for legacy command eviction.
+# Both installers call this to build the eviction list for wire_hook.
+# shellcheck disable=SC2034  # MANAGED_*_CMD vars are used by callers
+set_managed_cmds() {
+	local hooks_dir="$1"
+	# Old script name (log-permission.sh):
+	MANAGED_LOG_CMD="$hooks_dir/log-permission.sh"
+	# v1 legacy script — not installed by either installer; eviction-list only.
+	MANAGED_V1_CMD="$hooks_dir/permissionsync-log-permission-v1.sh"
+	# Old script name (log-permission-auto.sh):
+	MANAGED_MODE_LOG_CMD="CLAUDE_PERMISSION_MODE=log $hooks_dir/log-permission-auto.sh"
+	MANAGED_AUTO_CMD="CLAUDE_PERMISSION_AUTO=1 $hooks_dir/log-permission-auto.sh"
+	MANAGED_MODE_AUTO_CMD="CLAUDE_PERMISSION_MODE=auto $hooks_dir/log-permission-auto.sh"
+	MANAGED_WORKTREE_CMD="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $hooks_dir/log-permission-auto.sh"
+	MANAGED_MODE_WORKTREE_CMD="CLAUDE_PERMISSION_MODE=worktree $hooks_dir/log-permission-auto.sh"
+	# Current script name (permissionsync-log-permission.sh):
+	MANAGED_NEW_MODE_LOG_CMD="CLAUDE_PERMISSION_MODE=log $hooks_dir/permissionsync-log-permission.sh"
+	MANAGED_NEW_MODE_AUTO_CMD="CLAUDE_PERMISSION_MODE=auto $hooks_dir/permissionsync-log-permission.sh"
+	MANAGED_NEW_MODE_WORKTREE_CMD="CLAUDE_PERMISSION_MODE=worktree $hooks_dir/permissionsync-log-permission.sh"
+}
+
 # seed_baseline_permissions HOOKS_DIR SETTINGS
 #
 # Pre-seeds settings.json with curated safe-subcommand rules from config.

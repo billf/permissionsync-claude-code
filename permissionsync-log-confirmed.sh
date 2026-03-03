@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# log-confirmed.sh: PostToolUse hook — logs confirmed (approved + executed) operations
+# permissionsync-log-confirmed.sh: PostToolUse hook — logs confirmed (approved + executed) operations
 #
 # Fires only when a tool successfully executes. Appends to confirmed-approvals.jsonl,
 # giving a clean "definitely approved" signal distinct from the PermissionRequest log

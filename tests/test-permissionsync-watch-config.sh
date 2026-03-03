@@ -67,7 +67,7 @@ run_hook() {
 
 # Generate fixture JSON with all 5 hooks present (using $HOME/.claude/hooks/ paths)
 ALL_HOOKS_JSON=$(jq -nc \
-	--arg perm "${HOOKS_DIR}/permissionsync-log-permission-auto.sh" \
+	--arg perm "${HOOKS_DIR}/permissionsync-log-permission.sh" \
 	--arg post "${HOOKS_DIR}/permissionsync-log-confirmed.sh" \
 	--arg ptf "${HOOKS_DIR}/permissionsync-log-hook-errors.sh" \
 	--arg cc "${HOOKS_DIR}/permissionsync-watch-config.sh" \
@@ -81,8 +81,9 @@ ALL_HOOKS_JSON=$(jq -nc \
 	}}')
 
 # Generate fixture JSON with only PermissionRequest + PostToolUse (missing 3 new hooks)
+# shellcheck disable=SC2034  # fixture available for future tests
 MISSING_NEW_HOOKS_JSON=$(jq -nc \
-	--arg perm "${HOOKS_DIR}/permissionsync-log-permission-auto.sh" \
+	--arg perm "${HOOKS_DIR}/permissionsync-log-permission.sh" \
 	--arg post "${HOOKS_DIR}/permissionsync-log-confirmed.sh" \
 	'{hooks: {
 		PermissionRequest: [{matcher:"*",hooks:[{type:"command",command:$perm}]}],
@@ -104,7 +105,7 @@ MISSING_PERMREQ_JSON=$(jq -nc \
 
 # Generate fixture JSON missing PostToolUse only
 MISSING_POSTUSE_JSON=$(jq -nc \
-	--arg perm "${HOOKS_DIR}/permissionsync-log-permission-auto.sh" \
+	--arg perm "${HOOKS_DIR}/permissionsync-log-permission.sh" \
 	--arg ptf "${HOOKS_DIR}/permissionsync-log-hook-errors.sh" \
 	--arg cc "${HOOKS_DIR}/permissionsync-watch-config.sh" \
 	--arg se "${HOOKS_DIR}/permissionsync-sync-on-end.sh" \
@@ -117,7 +118,7 @@ MISSING_POSTUSE_JSON=$(jq -nc \
 
 # Generate fixture JSON missing PostToolUseFailure only
 MISSING_PTF_JSON=$(jq -nc \
-	--arg perm "${HOOKS_DIR}/permissionsync-log-permission-auto.sh" \
+	--arg perm "${HOOKS_DIR}/permissionsync-log-permission.sh" \
 	--arg post "${HOOKS_DIR}/permissionsync-log-confirmed.sh" \
 	--arg cc "${HOOKS_DIR}/permissionsync-watch-config.sh" \
 	--arg se "${HOOKS_DIR}/permissionsync-sync-on-end.sh" \
@@ -130,7 +131,7 @@ MISSING_PTF_JSON=$(jq -nc \
 
 # Generate fixture JSON missing ConfigChange only
 MISSING_CC_JSON=$(jq -nc \
-	--arg perm "${HOOKS_DIR}/permissionsync-log-permission-auto.sh" \
+	--arg perm "${HOOKS_DIR}/permissionsync-log-permission.sh" \
 	--arg post "${HOOKS_DIR}/permissionsync-log-confirmed.sh" \
 	--arg ptf "${HOOKS_DIR}/permissionsync-log-hook-errors.sh" \
 	--arg se "${HOOKS_DIR}/permissionsync-sync-on-end.sh" \
@@ -143,7 +144,7 @@ MISSING_CC_JSON=$(jq -nc \
 
 # Generate fixture JSON missing SessionEnd only
 MISSING_SE_JSON=$(jq -nc \
-	--arg perm "${HOOKS_DIR}/permissionsync-log-permission-auto.sh" \
+	--arg perm "${HOOKS_DIR}/permissionsync-log-permission.sh" \
 	--arg post "${HOOKS_DIR}/permissionsync-log-confirmed.sh" \
 	--arg ptf "${HOOKS_DIR}/permissionsync-log-hook-errors.sh" \
 	--arg cc "${HOOKS_DIR}/permissionsync-watch-config.sh" \

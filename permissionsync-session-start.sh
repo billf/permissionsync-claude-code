@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# session-start.sh: SessionStart hook — show actionable drift notification when new rules are pending
+# permissionsync-session-start.sh: SessionStart hook — show actionable drift notification when new rules are pending
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 

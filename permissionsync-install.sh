@@ -56,37 +56,13 @@ chmod +x "$HOOKS_DIR/permissionsync-worktree-create.sh"
 echo "✓ Copied scripts to $HOOKS_DIR/"
 
 # 2. Choose which hook script to wire up
+resolve_hook_cmd "$MODE" "$HOOKS_DIR"
 case "$MODE" in
---auto)
-	HOOK_CMD="CLAUDE_PERMISSION_MODE=auto $HOOKS_DIR/permissionsync-log-permission.sh"
-	echo "✓ Mode: auto-approve previously-seen rules"
-	;;
---worktree)
-	HOOK_CMD="CLAUDE_PERMISSION_MODE=worktree $HOOKS_DIR/permissionsync-log-permission.sh"
-	echo "✓ Mode: auto-approve + sibling worktree rules"
-	;;
-*)
-	HOOK_CMD="CLAUDE_PERMISSION_MODE=log $HOOKS_DIR/permissionsync-log-permission.sh"
-	echo "✓ Mode: log-only (manual approval still required)"
-	;;
+--auto) echo "✓ Mode: auto-approve previously-seen rules" ;;
+--worktree) echo "✓ Mode: auto-approve + sibling worktree rules" ;;
+*) echo "✓ Mode: log-only (manual approval still required)" ;;
 esac
-# Managed command patterns: all legacy and current variants that this installer owns.
-# Listed here so any previously-installed variant is evicted on re-install.
-# Old script name (log-permission.sh):
-MANAGED_LOG_CMD="$HOOKS_DIR/log-permission.sh"
-# v1 legacy script — not installed by either installer; eviction-list only.
-# Handles the edge case where a user manually wired it before it was deprecated.
-MANAGED_V1_CMD="$HOOKS_DIR/permissionsync-log-permission-v1.sh"
-# Old script name (log-permission-auto.sh):
-MANAGED_MODE_LOG_CMD="CLAUDE_PERMISSION_MODE=log $HOOKS_DIR/log-permission-auto.sh"
-MANAGED_AUTO_CMD="CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
-MANAGED_MODE_AUTO_CMD="CLAUDE_PERMISSION_MODE=auto $HOOKS_DIR/log-permission-auto.sh"
-MANAGED_WORKTREE_CMD="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $HOOKS_DIR/log-permission-auto.sh"
-MANAGED_MODE_WORKTREE_CMD="CLAUDE_PERMISSION_MODE=worktree $HOOKS_DIR/log-permission-auto.sh"
-# Current script name (permissionsync-log-permission.sh):
-MANAGED_NEW_MODE_LOG_CMD="CLAUDE_PERMISSION_MODE=log $HOOKS_DIR/permissionsync-log-permission.sh"
-MANAGED_NEW_MODE_AUTO_CMD="CLAUDE_PERMISSION_MODE=auto $HOOKS_DIR/permissionsync-log-permission.sh"
-MANAGED_NEW_MODE_WORKTREE_CMD="CLAUDE_PERMISSION_MODE=worktree $HOOKS_DIR/permissionsync-log-permission.sh"
+set_managed_cmds "$HOOKS_DIR"
 
 # 3. Ensure settings.json exists
 if [[ ! -f $SETTINGS ]]; then

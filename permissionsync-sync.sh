@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sync-permissions.sh
+# permissionsync-sync.sh
 #
 # Reads ~/.claude/permission-approvals.jsonl, deduplicates the rules,
 # and merges them into ~/.claude/settings.json under permissions.allow.
