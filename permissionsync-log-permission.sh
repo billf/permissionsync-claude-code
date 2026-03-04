@@ -65,18 +65,19 @@ auto)
 esac
 
 # is_never_auto_rule RULE → 0 if RULE should never be auto-approved from
-# history/worktree replay:
-# - Coarse bare matchers too broad for safe replay (Bash, Read, Write, etc.)
-# - Mode transitions requiring explicit consent (ExitPlanMode)
-# Exact non-parenthesized rules (e.g. mcp__server__tool) are allowed.
+# history/worktree replay. Uses an allowlist with a restrictive default:
+#   1. Scoped rules with parentheses — Bash(git push *), WebFetch(domain:x)
+#   2. MCP tool names — mcp__server__tool (exact, non-parenthesized)
+#   3. Read-only builtins — Read, Glob, Grep
+# Everything else (bare Bash, Write, Edit, AskUserQuestion, Agent,
+# ExitPlanMode, unknown future tools) is blocked.
 is_never_auto_rule() {
 	case "$1" in
-	Bash | Read | Write | Edit | MultiEdit | WebFetch | ExitPlanMode)
-		return 0
-		;;
-	*)
-		return 1
-		;;
+	*"("*")"*) return 1 ;; # scoped: Bash(git push *), WebFetch(domain:x)
+	mcp__*) return 1 ;;    # MCP tools: exact names
+	Read | Glob | Grep)    # read-only operations
+		return 1 ;;
+	*) return 0 ;; # everything else: blocked
 	esac
 }
 

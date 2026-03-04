@@ -262,6 +262,66 @@ rm -f "$LOG_FILE"
 out=$(run_hook_with_lib_dir "git push origin main" 1 "/nix/store/../../tmp/$(basename "$MALICIOUS_LIB_DIR")")
 assert_behavior "untrusted PERMISSIONSYNC_LIB_DIR traversal ignored" "" "$out"
 
+# --- AskUserQuestion never auto-approved ---
+rm -f "$LOG_FILE"
+
+out=$(run_hook_tool_mode "AskUserQuestion" '{"question":"pick one","options":[]}' "auto")
+assert_behavior "AskUserQuestion: first-seen not auto-approved" "" "$out"
+
+out=$(run_hook_tool_mode "AskUserQuestion" '{"question":"pick one","options":[]}' "auto")
+assert_behavior "AskUserQuestion: second-seen still not auto-approved" "" "$out"
+
+rm -f "$LOG_FILE"
+out=$(run_hook_tool_mode "AskUserQuestion" '{"question":"pick one","options":[]}' "worktree")
+assert_behavior "AskUserQuestion worktree: first-seen not auto-approved" "" "$out"
+
+out=$(run_hook_tool_mode "AskUserQuestion" '{"question":"pick one","options":[]}' "worktree")
+assert_behavior "AskUserQuestion worktree: second-seen still not auto-approved" "" "$out"
+
+# --- Unknown future tool never auto-approved ---
+rm -f "$LOG_FILE"
+
+out=$(run_hook_tool_mode "SomeFutureTool" '{}' "auto")
+assert_behavior "SomeFutureTool: first-seen not auto-approved" "" "$out"
+
+out=$(run_hook_tool_mode "SomeFutureTool" '{}' "auto")
+assert_behavior "SomeFutureTool: second-seen still not auto-approved" "" "$out"
+
+# --- Agent, NotebookEdit, WebSearch, EnterPlanMode never auto-approved ---
+rm -f "$LOG_FILE"
+for tool in Agent NotebookEdit WebSearch EnterPlanMode; do
+	out=$(run_hook_tool_mode "$tool" '{}' "auto")
+	assert_behavior "${tool}: first-seen not auto-approved" "" "$out"
+
+	out=$(run_hook_tool_mode "$tool" '{}' "auto")
+	assert_behavior "${tool}: second-seen still not auto-approved" "" "$out"
+done
+
+# --- Read is now allowlisted (auto-approved from history) ---
+rm -f "$LOG_FILE"
+
+out=$(run_hook_tool_mode "Read" '{"file_path":"/tmp/foo.txt"}' "auto")
+assert_behavior "Read: first-seen deferred (not auto-approved)" "" "$out"
+
+out=$(run_hook_tool_mode "Read" '{"file_path":"/tmp/foo.txt"}' "auto")
+assert_behavior "Read: second-seen auto-approved from history" "allow" "$out"
+
+# --- Scoped Bash and WebFetch still auto-approve from history (regression) ---
+rm -f "$LOG_FILE"
+
+out=$(run_hook_mode "git push origin main" "auto")
+assert_behavior "scoped Bash(git push *): first-seen deferred" "" "$out"
+
+out=$(run_hook_mode "git push origin main" "auto")
+assert_behavior "scoped Bash(git push *): second-seen auto-approved" "allow" "$out"
+
+rm -f "$LOG_FILE"
+out=$(run_hook_tool_mode "WebFetch" '{"url":"https://example.com","prompt":"read"}' "auto")
+assert_behavior "scoped WebFetch(domain:example.com): first-seen deferred" "" "$out"
+
+out=$(run_hook_tool_mode "WebFetch" '{"url":"https://example.com","prompt":"read"}' "auto")
+assert_behavior "scoped WebFetch(domain:example.com): second-seen auto-approved" "allow" "$out"
+
 echo "1..${TEST_NUM}"
 echo "# pass: ${PASS}"
 echo "# fail: ${FAIL}"
