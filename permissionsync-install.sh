@@ -14,20 +14,21 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PERMISSIONSYNC_LIB_DIR="${PERMISSIONSYNC_LIB_DIR:-$SCRIPT_DIR/lib}"
 HOOKS_DIR="$HOME/.claude/hooks"
 SETTINGS="$HOME/.claude/settings.json"
 MODE="${1:-}"
 
 # shellcheck source=lib/permissionsync-install-lib.sh
-source "$SCRIPT_DIR/lib/permissionsync-install-lib.sh"
+source "${PERMISSIONSYNC_LIB_DIR}/permissionsync-install-lib.sh"
 
 echo "=== Claude Permission Logger — Installer ==="
 echo ""
 
 # 1. Copy hook scripts and shared libraries
 mkdir -p "$HOOKS_DIR" "$HOOKS_DIR/lib"
-cp "$SCRIPT_DIR/lib/permissionsync-lib.sh" "$HOOKS_DIR/lib/"
-cp "$SCRIPT_DIR/lib/permissionsync-config.sh" "$HOOKS_DIR/lib/"
+cp "$PERMISSIONSYNC_LIB_DIR/permissionsync-lib.sh" "$HOOKS_DIR/lib/"
+cp "$PERMISSIONSYNC_LIB_DIR/permissionsync-config.sh" "$HOOKS_DIR/lib/"
 # log-permission-v1.sh (formerly log-permission.sh) not copied — eviction-list only
 cp "$SCRIPT_DIR/permissionsync-log-permission.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/permissionsync-log-confirmed.sh" "$HOOKS_DIR/"
@@ -73,7 +74,7 @@ fi
 if wire_hook "PermissionRequest" "$HOOK_CMD" "*" "permission logger" \
 	"$MANAGED_LOG_CMD" "$MANAGED_V1_CMD" "$MANAGED_MODE_LOG_CMD" \
 	"$MANAGED_AUTO_CMD" "$MANAGED_MODE_AUTO_CMD" \
-	"$MANAGED_WORKTREE_CMD" "$MANAGED_MODE_WORKTREE_CMD" \
+	"$MANAGED_WORKTREE_CMD" "$MANAGED_WORKTREE_CMD_ALT" "$MANAGED_MODE_WORKTREE_CMD" \
 	"$MANAGED_NEW_MODE_LOG_CMD" "$MANAGED_NEW_MODE_AUTO_CMD" \
 	"$MANAGED_NEW_MODE_WORKTREE_CMD"; then
 	echo "✓ Updated PermissionRequest hook in $SETTINGS"

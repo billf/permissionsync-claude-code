@@ -88,6 +88,7 @@ set_managed_cmds() {
 	MANAGED_AUTO_CMD="CLAUDE_PERMISSION_AUTO=1 $hooks_dir/log-permission-auto.sh"
 	MANAGED_MODE_AUTO_CMD="CLAUDE_PERMISSION_MODE=auto $hooks_dir/log-permission-auto.sh"
 	MANAGED_WORKTREE_CMD="CLAUDE_PERMISSION_WORKTREE=1 CLAUDE_PERMISSION_AUTO=1 $hooks_dir/log-permission-auto.sh"
+	MANAGED_WORKTREE_CMD_ALT="CLAUDE_PERMISSION_AUTO=1 CLAUDE_PERMISSION_WORKTREE=1 $hooks_dir/log-permission-auto.sh"
 	MANAGED_MODE_WORKTREE_CMD="CLAUDE_PERMISSION_MODE=worktree $hooks_dir/log-permission-auto.sh"
 	# Current script name (permissionsync-log-permission.sh):
 	MANAGED_NEW_MODE_LOG_CMD="CLAUDE_PERMISSION_MODE=log $hooks_dir/permissionsync-log-permission.sh"
