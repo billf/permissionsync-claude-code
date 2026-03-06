@@ -80,10 +80,10 @@ for ((i = 0; i < WORKTREE_COUNT; i++)); do
 	wt="${WORKTREE_PATHS[$i]}"
 	settings_file="${wt}/.claude/settings.local.json"
 	[[ -f $settings_file ]] || continue
-	rules=$(jq -r '.permissions.allow[]? // empty' "$settings_file" 2>/dev/null) || continue
+	rules=$(jq -r '.permissions.allow[]? // empty' "$settings_file" 2>/dev/null |
+		validate_rules) || continue
 	while IFS= read -r rule; do
 		[[ -z $rule ]] && continue
-		is_valid_rule "$rule" || continue
 		ALL_TAGGED_RULES="${ALL_TAGGED_RULES}${rule}	${wt}"$'\n'
 	done <<<"$rules"
 done
@@ -132,8 +132,7 @@ CURRENT_RULES=""
 CURRENT_SETTINGS="${CURRENT_WT}/.claude/settings.local.json"
 if [[ -f $CURRENT_SETTINGS ]]; then
 	CURRENT_RULES=$(jq -r '.permissions.allow[]? // empty' "$CURRENT_SETTINGS" 2>/dev/null |
-		while IFS= read -r r; do is_valid_rule "$r" && echo "$r"; done |
-		sort -u)
+		validate_rules | sort -u)
 fi
 
 # New rules (in aggregate but not in current)
@@ -157,14 +156,8 @@ write_local_settings() {
 	local rules="$2"
 	local label="$3"
 
-	# Write-boundary validation: strip any non-rule strings
-	local validated_rules=""
-	while IFS= read -r r; do
-		[[ -z $r ]] && continue
-		is_valid_rule "$r" || continue
-		validated_rules="${validated_rules}${r}"$'\n'
-	done <<<"$rules"
-	rules="$validated_rules"
+	# Defense-in-depth: re-validate before persisting
+	rules=$(echo "$rules" | validate_rules)
 
 	local allow_json
 	allow_json=$(echo "$rules" | jq -R -s 'split("\n") | map(select(length > 0)) | sort')
@@ -211,27 +204,20 @@ if [[ $SANITIZE -eq 1 ]]; then
 	for ((i = 0; i < WORKTREE_COUNT; i++)); do
 		settings_file="${WORKTREE_PATHS[$i]}/.claude/settings.local.json"
 		[[ -f $settings_file ]] || continue
+		# Re-reads raw rules (can't reuse ALL_TAGGED_RULES — sanitize
+		# needs the unvalidated input to compute the diff)
 		raw_rules=$(jq -r '.permissions.allow[]? // empty' "$settings_file" 2>/dev/null) || continue
-		clean_rules=""
-		while IFS= read -r r; do
-			[[ -z $r ]] && continue
-			is_valid_rule "$r" || continue
-			clean_rules="${clean_rules}${r}"$'\n'
-		done <<<"$raw_rules"
-		clean_rules=$(echo "$clean_rules" | sed '/^$/d' | filter_rules | sort -u)
-		raw_count=$(echo "$raw_rules" | sed '/^$/d' | wc -l | tr -d ' ')
-		clean_count=$(echo "$clean_rules" | sed '/^$/d' | wc -l | tr -d ' ')
-		if [[ $raw_count -ne $clean_count ]]; then
-			removed=$((raw_count - clean_count))
-			echo "=== ${WORKTREE_PATHS[$i]} (${removed} invalid) ==="
-			while IFS= read -r r; do
-				[[ -z $r ]] && continue
-				if ! echo "$clean_rules" | grep -qxF "$r"; then
-					echo "  - ${r}"
-				fi
-			done <<<"$raw_rules"
+		clean_rules=$(echo "$raw_rules" | filter_rules | sort -u)
+		removed_rules=$(comm -23 \
+			<(echo "$raw_rules" | sed '/^$/d' | sort -u) \
+			<(echo "$clean_rules" | sed '/^$/d'))
+		if [[ -n $removed_rules ]]; then
+			removed_count=$(echo "$removed_rules" | wc -l | tr -d ' ')
+			echo "=== ${WORKTREE_PATHS[$i]} (${removed_count} invalid) ==="
+			# shellcheck disable=SC2001
+			echo "$removed_rules" | sed 's/^/  - /'
 			if [[ $APPLY -eq 1 ]] || [[ $APPLY_ALL -eq 1 ]]; then
-				write_local_settings "${WORKTREE_PATHS[$i]}" "$clean_rules" "sanitized: removed ${removed} invalid entries"
+				write_local_settings "${WORKTREE_PATHS[$i]}" "$clean_rules" "sanitized: removed ${removed_count} invalid entries"
 			fi
 			dirty_count=$((dirty_count + 1))
 		fi

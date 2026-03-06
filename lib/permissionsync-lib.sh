@@ -343,16 +343,9 @@ read_sibling_rules() {
 	for ((i = 0; i < WORKTREE_COUNT; i++)); do
 		settings_file="${WORKTREE_PATHS[$i]}/.claude/settings.local.json"
 		[[ -f $settings_file ]] || continue
-		rules=$(jq -r '.permissions.allow[]? // empty' "$settings_file" 2>/dev/null) || continue
-		if [[ -n $rules ]]; then
-			local validated=""
-			while IFS= read -r r; do
-				[[ -z $r ]] && continue
-				is_valid_rule "$r" || continue
-				validated="${validated}${r}"$'\n'
-			done <<<"$rules"
-			all_rules="${all_rules}${validated}"
-		fi
+		rules=$(jq -r '.permissions.allow[]? // empty' "$settings_file" 2>/dev/null |
+			validate_rules) || continue
+		[[ -n $rules ]] && all_rules="${all_rules}${rules}"$'\n'
 	done
 
 	SIBLING_RULES=$(echo "$all_rules" | sed '/^$/d' | sort -u)
@@ -389,6 +382,18 @@ is_valid_rule() {
 		;;
 	*) return 1 ;; # anything else is not a valid rule
 	esac
+}
+
+# validate_rules
+#
+# Reads rules from stdin, writes only structurally valid ones to stdout.
+# Pure format check via is_valid_rule — no policy or binary-name filtering
+# (use filter_rules for that). Skips empty lines.
+validate_rules() {
+	while IFS= read -r rule; do
+		[[ -z $rule ]] && continue
+		is_valid_rule "$rule" && echo "$rule"
+	done
 }
 
 # filter_rules

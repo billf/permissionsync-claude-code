@@ -61,16 +61,9 @@ if [[ $GLOBAL_ONLY -eq 0 ]]; then
 			for ((i = 0; i < WORKTREE_COUNT; i++)); do
 				settings_file="${WORKTREE_PATHS[$i]}/.claude/settings.local.json"
 				[[ -f $settings_file ]] || continue
-				wt_rules=$(jq -r '.permissions.allow[]? // empty' "$settings_file" 2>/dev/null) || continue
-				if [[ -n $wt_rules ]]; then
-					local_validated=""
-					while IFS= read -r r; do
-						[[ -z $r ]] && continue
-						is_valid_rule "$r" || continue
-						local_validated="${local_validated}${r}"$'\n'
-					done <<<"$wt_rules"
-					[[ -n $local_validated ]] && ALLOW_RULES="${ALLOW_RULES}"$'\n'"${local_validated}"
-				fi
+				wt_rules=$(jq -r '.permissions.allow[]? // empty' "$settings_file" 2>/dev/null |
+					validate_rules) || continue
+				[[ -n $wt_rules ]] && ALLOW_RULES="${ALLOW_RULES}"$'\n'"${wt_rules}"
 			done
 		fi
 	fi
