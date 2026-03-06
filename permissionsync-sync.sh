@@ -162,6 +162,15 @@ write_settings() {
 	local allow_rules="$1"
 	local label="$2"
 
+	# Write-boundary validation: strip any non-rule strings
+	local validated=""
+	while IFS= read -r r; do
+		[[ -z $r ]] && continue
+		is_valid_rule "$r" || continue
+		validated="${validated}${r}"$'\n'
+	done <<<"$allow_rules"
+	allow_rules="$validated"
+
 	ALLOW_JSON=$(echo "$allow_rules" | jq -R -s 'split("\n") | map(select(length > 0)) | sort')
 
 	# Ensure settings.json exists with valid structure

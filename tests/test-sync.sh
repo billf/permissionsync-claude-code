@@ -5,36 +5,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=../lib/permissionsync-lib.sh
 source "${SCRIPT_DIR}/../lib/permissionsync-lib.sh"
-# Source permissionsync-sync.sh functions by extracting filter_rules
-# (permissionsync-sync.sh is a script, not just a library — we source the lib
-# and redefine filter_rules inline to test it in isolation)
+# filter_rules and is_valid_rule are defined in permissionsync-lib.sh (sourced above)
 
 PASS=0
 FAIL=0
 TEST_NUM=0
-
-# Redefine filter_rules exactly as in sync-permissions.sh
-filter_rules() {
-	while IFS= read -r rule; do
-		[[ -z $rule ]] && continue
-		if [[ $rule == Bash\(* ]]; then
-			# Extract the binary from Bash(BINARY ...) rules
-			if [[ $rule =~ ^Bash\(([^\ \)]+) ]]; then
-				local bin="${BASH_REMATCH[1]}"
-				# Reject shells/interpreters
-				if is_blocklisted_binary "$bin"; then continue; fi
-				# Reject shell keywords (for, if, while, etc.)
-				if is_shell_keyword "$bin"; then continue; fi
-				# Reject invalid binary names (variable assignments, metacharacters)
-				if [[ ! $bin =~ ^[a-zA-Z0-9_.~/-]+$ ]]; then continue; fi
-			else
-				# Bash(...) but couldn't extract a valid binary — reject
-				continue
-			fi
-		fi
-		echo "$rule"
-	done
-}
 
 assert_filtered() {
 	local desc="$1" input="$2"

@@ -14,6 +14,7 @@
 #   worktree-sync.sh --refine           # apply safe-subcommand refinement
 #   worktree-sync.sh --refine --apply   # refine + write to current worktree
 #   worktree-sync.sh --from-log         # also include rules from JSONL log
+#   worktree-sync.sh --sanitize         # remove invalid entries from all worktree settings
 #
 # Environment:
 #   CLAUDE_PERMISSION_LOG  - override log path (default: ~/.claude/permission-approvals.jsonl)
@@ -31,6 +32,7 @@ REFINE=0
 APPLY=0
 APPLY_ALL=0
 FROM_LOG=0
+SANITIZE=0
 MODE=""
 for arg in "$@"; do
 	case "$arg" in
@@ -38,15 +40,16 @@ for arg in "$@"; do
 	--apply) APPLY=1 ;;
 	--apply-all) APPLY_ALL=1 ;;
 	--from-log) FROM_LOG=1 ;;
+	--sanitize) SANITIZE=1 ;;
 	--preview | --report | --diff) MODE="$arg" ;;
 	*)
-		echo "Usage: $0 [--preview|--apply|--apply-all|--report|--diff|--refine] [--apply] [--from-log]"
+		echo "Usage: $0 [--preview|--apply|--apply-all|--report|--diff|--refine|--sanitize] [--apply] [--from-log]"
 		exit 1
 		;;
 	esac
 done
 # Default to --preview if nothing specified
-if [[ $REFINE -eq 0 ]] && [[ $APPLY -eq 0 ]] && [[ $APPLY_ALL -eq 0 ]] && [[ -z $MODE ]]; then
+if [[ $REFINE -eq 0 ]] && [[ $APPLY -eq 0 ]] && [[ $APPLY_ALL -eq 0 ]] && [[ $SANITIZE -eq 0 ]] && [[ -z $MODE ]]; then
 	MODE="--preview"
 fi
 
@@ -80,6 +83,7 @@ for ((i = 0; i < WORKTREE_COUNT; i++)); do
 	rules=$(jq -r '.permissions.allow[]? // empty' "$settings_file" 2>/dev/null) || continue
 	while IFS= read -r rule; do
 		[[ -z $rule ]] && continue
+		is_valid_rule "$rule" || continue
 		ALL_TAGGED_RULES="${ALL_TAGGED_RULES}${rule}	${wt}"$'\n'
 	done <<<"$rules"
 done
@@ -108,9 +112,11 @@ if [[ $FROM_LOG -eq 1 ]] && [[ -f $LOG_FILE ]]; then
 	done
 
 	# Filter log for entries matching worktree CWDs, extract rules
-	log_rules=$(jq -r "${jq_args[@]}" "${jq_expr} | .rule // empty" \
+	log_rules=$(jq -r "${jq_args[@]}" \
+		"${jq_expr} | select((.rule // \"\") | test(\"[\\\\n\\\\r]\") | not) | .rule // empty" \
 		"$LOG_FILE" 2>/dev/null |
-		grep -E '^(Bash\(.*\)|Read|Write|Edit|MultiEdit|WebFetch(\(.*\))?|mcp__.*)$' |
+		grep -E '^(Bash\(.*\)|WebFetch(\(.*\))?|mcp__.*)$' |
+		filter_rules |
 		sort -u) || true
 
 	if [[ -n $log_rules ]]; then
@@ -125,7 +131,9 @@ fi
 CURRENT_RULES=""
 CURRENT_SETTINGS="${CURRENT_WT}/.claude/settings.local.json"
 if [[ -f $CURRENT_SETTINGS ]]; then
-	CURRENT_RULES=$(jq -r '.permissions.allow[]? // empty' "$CURRENT_SETTINGS" 2>/dev/null | sort -u)
+	CURRENT_RULES=$(jq -r '.permissions.allow[]? // empty' "$CURRENT_SETTINGS" 2>/dev/null |
+		while IFS= read -r r; do is_valid_rule "$r" && echo "$r"; done |
+		sort -u)
 fi
 
 # New rules (in aggregate but not in current)
@@ -148,6 +156,15 @@ write_local_settings() {
 	local target_path="$1"
 	local rules="$2"
 	local label="$3"
+
+	# Write-boundary validation: strip any non-rule strings
+	local validated_rules=""
+	while IFS= read -r r; do
+		[[ -z $r ]] && continue
+		is_valid_rule "$r" || continue
+		validated_rules="${validated_rules}${r}"$'\n'
+	done <<<"$rules"
+	rules="$validated_rules"
 
 	local allow_json
 	allow_json=$(echo "$rules" | jq -R -s 'split("\n") | map(select(length > 0)) | sort')
@@ -187,7 +204,50 @@ write_local_settings() {
 # Dispatch
 # ============================================================
 
-if [[ $REFINE -eq 1 ]]; then
+if [[ $SANITIZE -eq 1 ]]; then
+	# Cleanup: filter invalid entries from all worktree settings
+	# --sanitize alone previews; --sanitize --apply writes
+	dirty_count=0
+	for ((i = 0; i < WORKTREE_COUNT; i++)); do
+		settings_file="${WORKTREE_PATHS[$i]}/.claude/settings.local.json"
+		[[ -f $settings_file ]] || continue
+		raw_rules=$(jq -r '.permissions.allow[]? // empty' "$settings_file" 2>/dev/null) || continue
+		clean_rules=""
+		while IFS= read -r r; do
+			[[ -z $r ]] && continue
+			is_valid_rule "$r" || continue
+			clean_rules="${clean_rules}${r}"$'\n'
+		done <<<"$raw_rules"
+		clean_rules=$(echo "$clean_rules" | sed '/^$/d' | filter_rules | sort -u)
+		raw_count=$(echo "$raw_rules" | sed '/^$/d' | wc -l | tr -d ' ')
+		clean_count=$(echo "$clean_rules" | sed '/^$/d' | wc -l | tr -d ' ')
+		if [[ $raw_count -ne $clean_count ]]; then
+			removed=$((raw_count - clean_count))
+			echo "=== ${WORKTREE_PATHS[$i]} (${removed} invalid) ==="
+			while IFS= read -r r; do
+				[[ -z $r ]] && continue
+				if ! echo "$clean_rules" | grep -qxF "$r"; then
+					echo "  - ${r}"
+				fi
+			done <<<"$raw_rules"
+			if [[ $APPLY -eq 1 ]] || [[ $APPLY_ALL -eq 1 ]]; then
+				write_local_settings "${WORKTREE_PATHS[$i]}" "$clean_rules" "sanitized: removed ${removed} invalid entries"
+			fi
+			dirty_count=$((dirty_count + 1))
+		fi
+	done
+	if [[ $dirty_count -eq 0 ]]; then
+		echo "All worktree settings are clean. Nothing to sanitize."
+	elif [[ $APPLY -eq 1 ]] || [[ $APPLY_ALL -eq 1 ]]; then
+		echo ""
+		echo "Sanitized ${dirty_count} worktree settings file(s)."
+	else
+		echo ""
+		echo "Found ${dirty_count} worktree(s) with invalid entries."
+		echo "Run with --sanitize --apply to clean them."
+	fi
+
+elif [[ $REFINE -eq 1 ]]; then
 	# Core refinement (sets REFINED_RULES, BROAD_RULES, SAFE_RULES)
 	refine_rules_from "$ALL_RULES"
 

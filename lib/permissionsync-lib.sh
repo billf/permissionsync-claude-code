@@ -345,7 +345,13 @@ read_sibling_rules() {
 		[[ -f $settings_file ]] || continue
 		rules=$(jq -r '.permissions.allow[]? // empty' "$settings_file" 2>/dev/null) || continue
 		if [[ -n $rules ]]; then
-			all_rules="${all_rules}${rules}"$'\n'
+			local validated=""
+			while IFS= read -r r; do
+				[[ -z $r ]] && continue
+				is_valid_rule "$r" || continue
+				validated="${validated}${r}"$'\n'
+			done <<<"$rules"
+			all_rules="${all_rules}${validated}"
 		fi
 	done
 
@@ -359,15 +365,44 @@ read_sibling_rules() {
 	return 0
 }
 
+# is_valid_rule RULE
+#
+# Returns 0 if RULE has the structural shape of a permission rule produced by
+# build_rule_v2. Pure format check — does NOT evaluate policy (see
+# is_never_auto_rule) or binary safety (see filter_rules).
+# Rejects commit-message fragments, stray text, and embedded newlines.
+is_valid_rule() {
+	case "$1" in
+	Bash\(*\))
+		# Scoped Bash rule — reject embedded newlines/CRs
+		[[ $1 != *$'\n'* && $1 != *$'\r'* ]]
+		return $?
+		;;
+	Bash) return 0 ;;                                          # bare Bash
+	WebFetch\(*\)) return 0 ;;                                 # scoped WebFetch
+	WebFetch) return 0 ;;                                      # bare WebFetch
+	Read | Write | Edit | MultiEdit | Glob | Grep) return 0 ;; # file tools
+	mcp__*)
+		# MCP tool names: only alphanumeric + underscores after mcp__
+		[[ $1 =~ ^mcp__[a-zA-Z0-9_]+$ ]]
+		return $?
+		;;
+	*) return 1 ;; # anything else is not a valid rule
+	esac
+}
+
 # filter_rules
 #
 # Reads rules from stdin, filters out invalid/dangerous ones.
-# Rejects: bare file-tool names, blocklisted binaries, shell keywords,
+# Rejects: structurally invalid strings, blocklisted binaries, shell keywords,
 # invalid binary names.
 # Writes valid rules to stdout.
 filter_rules() {
 	while IFS= read -r rule; do
 		[[ -z $rule ]] && continue
+		# Structural format gate — reject anything not shaped like a
+		# permission rule (catches commit-message fragments, stray text)
+		is_valid_rule "$rule" || continue
 		if [[ $rule == Bash\(* ]]; then
 			# Extract the binary from Bash(BINARY ...) rules
 			if [[ $rule =~ ^Bash\(([^\ \)]+) ]]; then

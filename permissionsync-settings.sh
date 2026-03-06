@@ -63,7 +63,13 @@ if [[ $GLOBAL_ONLY -eq 0 ]]; then
 				[[ -f $settings_file ]] || continue
 				wt_rules=$(jq -r '.permissions.allow[]? // empty' "$settings_file" 2>/dev/null) || continue
 				if [[ -n $wt_rules ]]; then
-					ALLOW_RULES="${ALLOW_RULES}"$'\n'"${wt_rules}"
+					local_validated=""
+					while IFS= read -r r; do
+						[[ -z $r ]] && continue
+						is_valid_rule "$r" || continue
+						local_validated="${local_validated}${r}"$'\n'
+					done <<<"$wt_rules"
+					[[ -n $local_validated ]] && ALLOW_RULES="${ALLOW_RULES}"$'\n'"${local_validated}"
 				fi
 			done
 		fi
@@ -75,8 +81,9 @@ fi
 # ============================================================
 
 if [[ $FROM_LOG -eq 1 ]] && [[ -f $LOG_FILE ]]; then
-	log_rules=$(jq -r '.rule // empty' "$LOG_FILE" 2>/dev/null |
-		grep -E '^(Bash\(.*\)|WebFetch(\(.*\))?|mcp__.*)$') || true
+	log_rules=$(jq -r 'select((.rule // "") | test("[\n\r]") | not) | .rule // empty' "$LOG_FILE" 2>/dev/null |
+		grep -E '^(Bash\(.*\)|WebFetch(\(.*\))?|mcp__.*)$' |
+		filter_rules) || true
 	if [[ -n $log_rules ]]; then
 		ALLOW_RULES="${ALLOW_RULES}"$'\n'"${log_rules}"
 	fi

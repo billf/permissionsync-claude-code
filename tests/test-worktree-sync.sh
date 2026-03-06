@@ -201,6 +201,93 @@ cd "$REPO_MAIN"
 out=$(CLAUDE_PERMISSION_LOG="$LOG_FILE" bash "$SYNC_SCRIPT" --from-log --preview 2>&1)
 assert_contains "--from-log includes log rule" "Bash(docker ps *)" "$out"
 
+# ============================================================
+# Test: Contamination filtering — garbage in settings.local.json
+# ============================================================
+
+# Seed wt1 with contaminated rules (commit message fragments mixed with valid rules)
+cat >"$REPO_WT1/.claude/settings.local.json" <<'EOF'
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push *)",
+      "- Add zerocopy derives to MarketState",
+      "Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+      "EOF",
+      "[BAC-217] add MockGatewayClient for testing",
+      "Bash(npm install *)"
+    ]
+  }
+}
+EOF
+
+# Preview from main — garbage should be stripped from aggregated output
+cd "$REPO_MAIN"
+out=$(bash "$SYNC_SCRIPT" --preview 2>&1)
+
+assert_not_contains() {
+	local desc="$1" needle="$2" haystack="$3"
+	TEST_NUM=$((TEST_NUM + 1))
+	if ! echo "$haystack" | grep -qF "$needle"; then
+		echo "ok ${TEST_NUM} - ${desc}"
+		PASS=$((PASS + 1))
+	else
+		echo "not ok ${TEST_NUM} - ${desc}"
+		echo "#   should NOT contain: '${needle}'"
+		echo "#   output: '${haystack}'"
+		FAIL=$((FAIL + 1))
+	fi
+}
+
+assert_not_contains "contamination: zerocopy filtered" "zerocopy derives" "$out"
+assert_not_contains "contamination: Co-Authored-By filtered" "Co-Authored-By" "$out"
+assert_not_contains "contamination: EOF filtered" '"EOF"' "$out"
+assert_not_contains "contamination: BAC-217 filtered" "BAC-217" "$out"
+# Valid rules should still be present
+assert_contains "contamination: git push survives" "Bash(git push *)" "$out"
+assert_contains "contamination: npm install survives" "Bash(npm install *)" "$out"
+
+# Apply from wt2 — garbage should not be written
+cd "$REPO_WT2"
+rm -f "$REPO_WT2/.claude/settings.local.json"
+bash "$SYNC_SCRIPT" --apply >/dev/null 2>&1
+
+wt2_rules=$(jq -r '.permissions.allow[]' "$REPO_WT2/.claude/settings.local.json" 2>/dev/null)
+assert_not_contains "apply: no zerocopy in wt2" "zerocopy" "$wt2_rules"
+assert_not_contains "apply: no Co-Authored-By in wt2" "Co-Authored-By" "$wt2_rules"
+assert_not_contains "apply: no EOF in wt2" "EOF" "$wt2_rules"
+
+# ============================================================
+# Test: --sanitize previews and --sanitize --apply cleans
+# ============================================================
+
+cd "$REPO_MAIN"
+
+# Preview mode (no --apply): shows what would be removed but doesn't write
+sanitize_preview=$(bash "$SYNC_SCRIPT" --sanitize 2>&1)
+assert_contains "sanitize preview: shows invalid entries" "zerocopy" "$sanitize_preview"
+assert_contains "sanitize preview: suggests --apply" "sanitize --apply" "$sanitize_preview"
+
+# wt1 should still have contamination (preview doesn't write)
+wt1_before=$(jq -r '.permissions.allow[]' "$REPO_WT1/.claude/settings.local.json" 2>/dev/null)
+assert_contains "sanitize preview: wt1 still has garbage" "zerocopy" "$wt1_before"
+
+# Apply mode: actually cleans
+sanitize_out=$(bash "$SYNC_SCRIPT" --sanitize --apply 2>&1)
+assert_contains "sanitize apply: reports sanitized" "Sanitized" "$sanitize_out"
+assert_contains "sanitize apply: shows removed entry" "zerocopy" "$sanitize_out"
+
+# Verify wt1 was cleaned
+wt1_rules=$(jq -r '.permissions.allow[]' "$REPO_WT1/.claude/settings.local.json" 2>/dev/null)
+assert_not_contains "sanitize: wt1 cleaned of zerocopy" "zerocopy" "$wt1_rules"
+assert_not_contains "sanitize: wt1 cleaned of Co-Authored-By" "Co-Authored-By" "$wt1_rules"
+assert_contains "sanitize: wt1 keeps git push" "Bash(git push *)" "$wt1_rules"
+assert_contains "sanitize: wt1 keeps npm install" "Bash(npm install *)" "$wt1_rules"
+
+# Running sanitize again should find nothing
+sanitize_again=$(bash "$SYNC_SCRIPT" --sanitize 2>&1)
+assert_contains "sanitize: idempotent" "All worktree settings are clean" "$sanitize_again"
+
 cd "$ORIG_DIR"
 
 echo ""
